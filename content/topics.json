@@ -1,0 +1,37 @@
+[
+  {
+    "slug": "landing-zone",
+    "sector": "Landing Zone - All Sectors",
+    "message": "PlayMotion is one interactive platform that becomes the perfect fit for any sector - a single landing zone that adapts to Education, Sports, Fitness, Events, Museums, and Gaming Zones."
+  },
+  {
+    "slug": "education",
+    "sector": "Education",
+    "message": "How PlayMotion turns classrooms and learning centers into interactive, movement-based learning experiences."
+  },
+  {
+    "slug": "sports",
+    "sector": "Sports",
+    "message": "How PlayMotion helps sports clubs and academies train smarter with interactive, gamified drills."
+  },
+  {
+    "slug": "fitness",
+    "sector": "Fitness",
+    "message": "How PlayMotion gamifies workouts to boost motivation and engagement in gyms and fitness studios."
+  },
+  {
+    "slug": "events",
+    "sector": "Events",
+    "message": "How PlayMotion creates unforgettable interactive attractions for exhibitions, activations, and events."
+  },
+  {
+    "slug": "museums",
+    "sector": "Museums & Experience Centers",
+    "message": "How PlayMotion brings exhibits to life with interactive, playful storytelling for museums and experience centers."
+  },
+  {
+    "slug": "gaming-zones",
+    "sector": "Gaming Zones",
+    "message": "How PlayMotion powers next-generation gaming zones and entertainment centers with immersive interactive walls."
+  }
+]
