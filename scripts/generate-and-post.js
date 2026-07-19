@@ -10,7 +10,16 @@ const LAST_INDEX_FILE = path.join(CONTENT_DIR, 'last_index.json');
 
 async function callOpenAI(prompt) {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) throw new Error('OPENAI_API_KEY not set');
+  // Allow a safe dummy mode for local testing without keys: set DUMMY_MODE=1
+  if (!key) {
+    if (process.env.DUMMY_MODE === '1') {
+      // simple deterministic placeholder based on prompt
+      const titleMatch = /"title":\s*"([^"]+)"/.exec(prompt);
+      const topicTitle = titleMatch ? titleMatch[1] : 'Daily topic';
+      return `(DUMMY) A short LinkedIn post about ${topicTitle}. What are your thoughts?`;
+    }
+    throw new Error('OPENAI_API_KEY not set');
+  }
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
