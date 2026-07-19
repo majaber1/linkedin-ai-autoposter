@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>LinkedIn AI Autoposter - Posts</title>
+    <style>body{font-family:Arial,Helvetica,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;}pre{white-space:pre-wrap;background:#f7f7f7;padding:1rem;border-radius:6px}</style>
+  </head>
+  <body>
+    <h1>Generated Posts</h1>
+    <div id="posts">Loading…</div>
+    <script>
+      async function load(){
+        try{
+          const res = await fetch('/posts');
+          const posts = await res.json();
+          const container = document.getElementById('posts');
+          if(!posts.length) container.innerText = 'No posts yet.';
+          posts.forEach(p => {
+            const el = document.createElement('div');
+            el.innerHTML = `<h3>${p.filename}</h3><pre>${p.content}</pre>`;
+            container.appendChild(el);
+          });
+        }catch(e){document.getElementById('posts').innerText = 'Failed to load posts: '+e}
+      }
+      load();
+    </script>
+  </body>
+</html>
