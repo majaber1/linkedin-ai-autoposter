@@ -86,6 +86,7 @@ function readJSON(filePath) {
 }
 
 function writePostToFile(title, text) {
+  if (!fs.existsSync(POSTS_DIR)) fs.mkdirSync(POSTS_DIR, { recursive: true });
   const now = new Date();
   const date = now.toISOString().slice(0,10);
   const slug = slugify(title || text.slice(0,40), { lower: true, strict: true });
