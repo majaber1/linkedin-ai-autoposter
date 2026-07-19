@@ -1,0 +1,15 @@
+{
+  "name": "linkedin-ai-autoposter",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "generate": "node scripts/generate-and-post.js",
+    "dev": "nodemon server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^2.6.7",
+    "slugify": "^1.6.6"
+  }
+}
