@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 9 * * *' # every day at 09:00 UTC - adjust as desired
   workflow_dispatch:
+    inputs:
+      test:
+        description: 'Run in test (dummy) mode (true/false)'
+        required: false
+        default: 'false'
 
 jobs:
   build-and-post:
@@ -25,4 +30,20 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
+          DUMMY_MODE: ${{ github.event.inputs.test }}
+          SKIP_PUBLISH: ${{ github.event.inputs.test }}
         run: npm run generate
+
+      - name: Commit generated posts (if any)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add content/posts || true
+          if ! git diff --staged --quiet; then
+            git commit -m "Add generated post [ci skip]" || true
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "No changes to commit"
+          fi

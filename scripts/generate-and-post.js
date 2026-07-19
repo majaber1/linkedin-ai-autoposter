@@ -12,7 +12,7 @@ async function callOpenAI(prompt) {
   const key = process.env.OPENAI_API_KEY;
   // Allow a safe dummy mode for local testing without keys: set DUMMY_MODE=1
   if (!key) {
-    if (process.env.DUMMY_MODE === '1') {
+    if (process.env.DUMMY_MODE === '1' || process.env.DUMMY_MODE === 'true') {
       // simple deterministic placeholder based on prompt
       const titleMatch = /"title":\s*"([^"]+)"/.exec(prompt);
       const topicTitle = titleMatch ? titleMatch[1] : 'Daily topic';
