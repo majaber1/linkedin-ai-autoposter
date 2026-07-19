@@ -23,7 +23,7 @@ jobs:
           node-version: '18'
 
       - name: Install deps
-        run: npm ci
+        run: npm install --no-audit --no-fund --silent
 
       - name: Run daily generator and post
         env:
