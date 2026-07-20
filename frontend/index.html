@@ -3,26 +3,274 @@
   <head>
     <meta charset="utf-8" />
     <title>LinkedIn AI Autoposter - Posts</title>
-    <style>body{font-family:Arial,Helvetica,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;}pre{white-space:pre-wrap;background:#f7f7f7;padding:1rem;border-radius:6px}</style>
+    <style>
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 1rem;
+        background: #f5f5f5;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: white;
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .auth-section {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+      .user-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+      }
+      button {
+        padding: 0.5rem 1rem;
+        background: #1f6feb;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      button:hover {
+        background: #388bfd;
+      }
+      button.logout {
+        background: #da3633;
+      }
+      button.logout:hover {
+        background: #f85149;
+      }
+      button.generate {
+        background: #2ea043;
+      }
+      button.generate:hover {
+        background: #3fb950;
+      }
+      .login-prompt {
+        background: white;
+        padding: 2rem;
+        border-radius: 6px;
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .posts-container {
+        background: white;
+        padding: 1rem;
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .post {
+        margin-bottom: 2rem;
+        padding-bottom: 2rem;
+        border-bottom: 1px solid #e1e4e8;
+      }
+      .post:last-child {
+        border-bottom: none;
+      }
+      .post h3 {
+        margin: 0 0 0.5rem 0;
+        color: #24292e;
+      }
+      .post pre {
+        white-space: pre-wrap;
+        background: #f6f8fa;
+        padding: 1rem;
+        border-radius: 6px;
+        overflow-x: auto;
+      }
+      .actions {
+        margin-bottom: 2rem;
+      }
+      .message {
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+      }
+      .message.success {
+        background: #dafbe1;
+        color: #033a16;
+        border: 1px solid #26a641;
+      }
+      .message.error {
+        background: #ffebe6;
+        color: #82071e;
+        border: 1px solid #da3633;
+      }
+    </style>
   </head>
   <body>
-    <h1>Generated Posts</h1>
-    <div id="posts">Loading…</div>
+    <div class="header">
+      <h1>🤖 LinkedIn AI Autoposter</h1>
+      <div class="auth-section">
+        <div id="auth-status"></div>
+      </div>
+    </div>
+
+    <div id="content">
+      <div class="login-prompt">
+        <p>Loading authentication status...</p>
+      </div>
+    </div>
+
     <script>
-      async function load(){
-        try{
+      const authStatus = document.getElementById('auth-status');
+      const content = document.getElementById('content');
+      let authToken = null;
+
+      async function checkAuth() {
+        try {
+          // Try to get auth token from URL or cookie
+          const params = new URLSearchParams(window.location.search);
+          const urlToken = params.get('auth_token');
+          if (urlToken) {
+            authToken = urlToken;
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+
+          const res = await fetch('/auth/me' + (authToken ? '?auth_token=' + authToken : ''));
+          const data = await res.json();
+
+          if (data.ok && data.user) {
+            authToken = authToken || (document.cookie.match(/auth_token=([^;]+)/) || [])[1];
+            showAuthenticated(data.user);
+          } else {
+            showLoginPrompt();
+          }
+        } catch (err) {
+          console.error('Auth check failed:', err);
+          showLoginPrompt();
+        }
+      }
+
+      function showLoginPrompt() {
+        authStatus.innerHTML = '<button onclick="startLogin()">🔐 Sign in with GitHub</button>';
+        content.innerHTML = `
+          <div class="login-prompt">
+            <h2>Welcome to LinkedIn AI Autoposter</h2>
+            <p>Sign in with GitHub to manage your automated LinkedIn posts.</p>
+            <button onclick="startLogin()" style="padding: 0.75rem 1.5rem; font-size: 16px;">
+              🔐 Sign in with GitHub
+            </button>
+          </div>
+        `;
+      }
+
+      async function startLogin() {
+        try {
+          const res = await fetch('/auth/github');
+          const data = await res.json();
+          if (data.ok && data.url) {
+            window.location.href = data.url;
+          }
+        } catch (err) {
+          alert('Login failed: ' + err.message);
+        }
+      }
+
+      function showAuthenticated(user) {
+        authStatus.innerHTML = `
+          <div class="user-info">
+            <img src="${user.avatar}" alt="${user.login}" class="avatar">
+            <span>${user.login}</span>
+            <button class="logout" onclick="logout()">Logout</button>
+          </div>
+        `;
+
+        content.innerHTML = `
+          <div class="actions">
+            <h2>Generate Post</h2>
+            <p>
+              <label>
+                <input type="checkbox" id="publish" checked> Publish to LinkedIn
+              </label>
+            </p>
+            <button class="generate" onclick="generatePost()">Generate & Post</button>
+            <div id="message"></div>
+          </div>
+
+          <div class="posts-container">
+            <h2>Generated Posts</h2>
+            <div id="posts">Loading…</div>
+          </div>
+        `;
+
+        loadPosts();
+      }
+
+      async function generatePost() {
+        const publish = document.getElementById('publish').checked;
+        const messageDiv = document.getElementById('message');
+        messageDiv.innerHTML = '<div class="message">Generating post...</div>';
+
+        try {
+          const res = await fetch('/generate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + authToken
+            },
+            body: JSON.stringify({ publish })
+          });
+
+          if (!res.ok) {
+            throw new Error('Failed to generate post');
+          }
+
+          const data = await res.json();
+          messageDiv.innerHTML = '<div class="message success">✓ Post generated and ' + (publish ? 'published' : 'saved') + '!</div>';
+          setTimeout(() => loadPosts(), 1000);
+        } catch (err) {
+          messageDiv.innerHTML = '<div class="message error">✗ Error: ' + err.message + '</div>';
+        }
+      }
+
+      async function loadPosts() {
+        try {
           const res = await fetch('/posts');
           const posts = await res.json();
           const container = document.getElementById('posts');
-          if(!posts.length) container.innerText = 'No posts yet.';
-          posts.forEach(p => {
-            const el = document.createElement('div');
-            el.innerHTML = `<h3>${p.filename}</h3><pre>${p.content}</pre>`;
-            container.appendChild(el);
-          });
-        }catch(e){document.getElementById('posts').innerText = 'Failed to load posts: '+e}
+          if (!posts.length) {
+            container.innerHTML = '<p>No posts yet.</p>';
+            return;
+          }
+          container.innerHTML = posts.map(p => `
+            <div class="post">
+              <h3>${escapeHtml(p.filename)}</h3>
+              <pre>${escapeHtml(p.content)}</pre>
+            </div>
+          `).join('');
+        } catch (err) {
+          document.getElementById('posts').innerHTML = '<p>Failed to load posts: ' + err.message + '</p>';
+        }
       }
-      load();
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      async function logout() {
+        await fetch('/auth/logout', { method: 'POST' });
+        authToken = null;
+        checkAuth();
+      }
+
+      checkAuth();
     </script>
   </body>
 </html>
