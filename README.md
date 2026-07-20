@@ -1,35 +1,230 @@
 # linkedin-ai-autoposter
 
-Daily AI-generated LinkedIn post automation using GitHub Actions.
+Daily AI-generated LinkedIn post automation using GitHub Actions with a beautiful web dashboard.
 
-## Goal
-Automatically write and publish one on-brand LinkedIn post per day, with zero manual work, using AI for the copy and a scheduled GitHub Actions workflow for the publishing.
+## ✨ Features
 
-## How it works
-1. A GitHub Actions workflow wakes up on a daily cron schedule (see .github/workflows/daily-post.yml).
-2. It runs scripts/generate-and-post.js, which picks the next topic from content/topics.json and asks an AI model to write a short LinkedIn post about it.
-3. The script publishes the generated text to LinkedIn via the LinkedIn API.
-4. Every generated post is also saved under content/posts/ as a permanent log/history in this repo.
+- 🤖 **AI-Powered Posts** - Uses OpenAI GPT-3.5 to generate on-brand LinkedIn content
+- 🔐 **GitHub OAuth** - Secure authentication via GitHub (no passwords)
+- 📊 **Beautiful Dashboard** - Modern web UI to view, generate, and manage posts
+- 🚀 **Test Mode** - Generate and preview posts without publishing
+- 📋 **Topic Rotation** - Automatically rotates through predefined topics
+- 📝 **Post History** - All generated posts saved as permanent history
+- ⏰ **Scheduled Automation** - GitHub Actions workflow runs on daily schedule
+- 🔄 **Zero Config** - Works out of the box with test/dummy mode
 
-## Tech stack
-- GitHub Actions (scheduler + runner)
-- Node.js script (scripts/generate-and-post.js)
-- OpenAI API for content generation
-- LinkedIn API (UGC Posts / Share API) for publishing
+## 🚀 Quick Start
 
-## Setup (you do this yourself - no credentials live in this repo)
-1. Go to this repo's Settings > Secrets and variables > Actions.
-2. Add these repository secrets:
-   - OPENAI_API_KEY - your OpenAI API key
-   - LINKEDIN_ACCESS_TOKEN - a LinkedIn OAuth access token with the w_member_social scope
-   - LINKEDIN_PERSON_URN - your LinkedIn member URN, e.g. urn:li:person:xxxxxxx
-3. Review/edit content/topics.json to change the sectors, order, or messaging.
-4. Make sure GitHub Actions is enabled for this repo (Actions tab).
-5. Adjust the cron schedule in .github/workflows/daily-post.yml to your preferred posting time (it is in UTC).
-6. Trigger the workflow manually once from the Actions tab (workflow_dispatch) to test before relying on the daily schedule.
+### 1. Local Development
 
-## Content plan - initial post
-The first post is themed "landing zone": PlayMotion introduced as one platform that acts as a single entry point adapting to many different sectors - Education, Sports, Fitness, Events, Museums & Experience Centers, and Gaming Zones. Later posts rotate through each sector in more depth. The draft lives in content/posts/initial-landing-zone-post.md.
+```bash
+# Clone and install
+git clone https://github.com/majaber1/linkedin-ai-autoposter.git
+cd linkedin-ai-autoposter
+npm install
 
-## Disclaimer
-No LinkedIn or OpenAI credentials are stored in this repository. You must supply your own API keys/tokens via GitHub Secrets for the automation to actually publish posts.
+# No credentials needed for test mode!
+npm start
+```
+
+Visit `http://localhost:3000`
+
+### 2. GitHub OAuth Setup (Required for Web Dashboard)
+
+1. Go to https://github.com/settings/developers → **OAuth Apps** → **New OAuth App**
+2. Fill in:
+   - **Application name:** `LinkedIn AI Autoposter`
+   - **Homepage URL:** `http://localhost:3000`
+   - **Authorization callback URL:** `http://localhost:3000/auth/github/callback`
+3. Copy **Client ID** and **Client Secret**
+4. Create `.env` file:
+   ```bash
+   GITHUB_CLIENT_ID=your_client_id
+   GITHUB_CLIENT_SECRET=your_client_secret
+   ```
+
+### 3. Optional: Real LinkedIn Publishing
+
+To publish actual posts to LinkedIn:
+
+1. Go to **GitHub Repo** → **Settings** → **Secrets and variables** → **Actions**
+2. Add these secrets:
+   - `OPENAI_API_KEY` - Get from https://platform.openai.com/api-keys
+   - `LINKEDIN_ACCESS_TOKEN` - Create OAuth token at https://www.linkedin.com/developers
+   - `LINKEDIN_PERSON_URN` - Your LinkedIn member URN (e.g., `urn:li:person:12345`)
+
+## 📖 How It Works
+
+### Web Dashboard
+
+1. **Sign in** with GitHub OAuth
+2. **View dashboard** with:
+   - Total posts generated
+   - Number of topics available
+   - Next topic to be posted
+   - Full post history with previews
+3. **Generate post** - Click "Generate & Preview" button
+4. In test mode, posts are saved locally without publishing to LinkedIn
+
+### Automated Workflow
+
+The GitHub Actions workflow (`daily-post.yml`) runs on schedule:
+
+1. **Triggers daily** at 9:00 AM UTC (customizable)
+2. **Fetches next topic** from `content/topics.json`
+3. **Generates content** using OpenAI API
+4. **Publishes to LinkedIn** (if credentials configured)
+5. **Commits post history** to the repo
+6. **Increments index** for next post topic
+
+## 📁 Project Structure
+
+```
+.
+├── frontend/
+│   └── index.html           # Web dashboard UI
+├── server/
+│   └── index.js             # Express server + OAuth + API endpoints
+├── scripts/
+│   └── generate-and-post.js # Core generation & publishing logic
+├── content/
+│   ├── topics.json          # Topic rotation list
+│   ├── last_index.json      # Current topic index
+│   └── posts/               # Generated posts history
+├── .github/
+│   └── workflows/
+│       └── daily-post.yml   # Scheduled workflow
+└── package.json
+```
+
+## 🔧 Configuration
+
+### Topics (`content/topics.json`)
+
+Edit the topics array to customize what gets posted:
+
+```json
+[
+  {
+    "slug": "landing-zone",
+    "sector": "Landing Zone - All Sectors",
+    "message": "PlayMotion is one interactive platform..."
+  },
+  {
+    "slug": "education",
+    "sector": "Education",
+    "message": "How PlayMotion turns classrooms..."
+  }
+  // ... more topics
+]
+```
+
+### Schedule (`cron` in `.github/workflows/daily-post.yml`)
+
+Default: **9:00 AM UTC**
+
+```yaml
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Change the 9 to your preferred hour (0-23 UTC)
+```
+
+## 🔐 Security
+
+- ✅ No credentials stored in repo
+- ✅ Secrets managed via GitHub Actions
+- ✅ GitHub OAuth for authentication
+- ✅ Test mode for safe local development
+- ✅ Environment variable validation
+
+## 📊 API Endpoints
+
+| Method | Endpoint | Auth | Purpose |
+|--------|----------|------|---------|
+| GET | `/auth/me` | ✓ | Check auth status |
+| GET | `/auth/github` | - | OAuth login redirect |
+| GET | `/auth/github/callback` | - | OAuth callback |
+| POST | `/auth/logout` | ✓ | Logout |
+| GET | `/api/posts` | - | Get all posts |
+| GET | `/api/topics` | - | Get topics & current index |
+| POST | `/api/generate` | ✓ | Generate new post |
+| PUT | `/api/topics` | ✓ | Update topics |
+
+## 🛠️ Development
+
+### Local Testing
+
+```bash
+npm start
+# Visit http://localhost:3000
+# Click "Sign in with GitHub" (uses your OAuth app from setup)
+```
+
+### Test Workflow Manually
+
+In GitHub repo → Actions → Daily LinkedIn Post → "Run workflow" → Select "true" for test mode
+
+### View Generated Posts
+
+```bash
+# All posts are saved to:
+ls content/posts/
+```
+
+## 🚢 Deployment
+
+### Heroku / Railway / Vercel
+
+Set environment variables:
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `OPENAI_API_KEY` (optional, for real posting)
+- `LINKEDIN_ACCESS_TOKEN` (optional)
+- `LINKEDIN_PERSON_URN` (optional)
+
+Update OAuth app callback URL to your production domain.
+
+### Docker
+
+```dockerfile
+FROM node:18
+WORKDIR /app
+COPY . .
+RUN npm install
+CMD ["npm", "start"]
+```
+
+## 🤝 Contributing
+
+Ideas for features:
+- [ ] Post scheduling UI
+- [ ] Topic editor in dashboard
+- [ ] Tone/style selector
+- [ ] Post preview before save
+- [ ] Analytics dashboard
+- [ ] Multi-account support
+
+## ⚠️ Disclaimer
+
+- This tool uses OpenAI API - costs may apply
+- LinkedIn API rate limits apply
+- Always review AI-generated content before publishing
+- Test thoroughly before scheduling production posts
+
+## 📝 License
+
+MIT
+
+## 🎯 Next Steps
+
+1. **Fork this repo** (or clone)
+2. **Register OAuth app** on GitHub (5 min)
+3. **Set env variables** (.env or GitHub Secrets)
+4. **Run locally** with `npm start`
+5. **Optional:** Add OPENAI_API_KEY and LinkedIn credentials for real publishing
+6. **Customize topics** in `content/topics.json`
+7. **Deploy** to your hosting platform
+
+---
+
+**Made with ❤️ for automating professional content creation**
