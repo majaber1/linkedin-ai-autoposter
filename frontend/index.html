@@ -2,167 +2,220 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>LinkedIn AI Autoposter - Posts</title>
+    <title>LinkedIn AI Autoposter</title>
     <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
-        font-family: Arial, Helvetica, sans-serif;
-        max-width: 900px;
-        margin: 0 auto;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
         padding: 1rem;
-        background: #f5f5f5;
       }
+      .container { max-width: 1200px; margin: 0 auto; }
       .header {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: white;
-        padding: 1rem;
-        border-radius: 6px;
-        margin-bottom: 2rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
       }
-      .auth-section {
+      .header h1 { font-size: 28px; color: #333; }
+      .header .right { display: flex; gap: 1rem; align-items: center; }
+      .user-badge {
         display: flex;
         align-items: center;
-        gap: 1rem;
-      }
-      .user-info {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-      .avatar {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-      }
-      button {
+        gap: 0.75rem;
+        background: #f0f0f0;
         padding: 0.5rem 1rem;
-        background: #1f6feb;
-        color: white;
+        border-radius: 8px;
+      }
+      .avatar { width: 32px; height: 32px; border-radius: 50%; }
+      button {
+        padding: 0.75rem 1.5rem;
         border: none;
-        border-radius: 6px;
-        cursor: pointer;
+        border-radius: 8px;
         font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
       }
-      button:hover {
-        background: #388bfd;
+      button.primary {
+        background: #667eea;
+        color: white;
       }
-      button.logout {
-        background: #da3633;
+      button.primary:hover { background: #5568d3; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
+      button.success {
+        background: #10b981;
+        color: white;
       }
-      button.logout:hover {
-        background: #f85149;
+      button.success:hover { background: #059669; }
+      button.danger {
+        background: #ef4444;
+        color: white;
       }
-      button.generate {
-        background: #2ea043;
+      button.danger:hover { background: #dc2626; }
+      .login-screen {
+        background: white;
+        padding: 3rem;
+        border-radius: 12px;
+        text-align: center;
+        max-width: 400px;
+        margin: 4rem auto;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
       }
-      button.generate:hover {
-        background: #3fb950;
+      .login-screen h2 { margin-bottom: 1rem; color: #333; }
+      .login-screen p { color: #666; margin-bottom: 2rem; }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        margin-bottom: 2rem;
       }
-      .login-prompt {
+      .card {
         background: white;
         padding: 2rem;
-        border-radius: 6px;
-        text-align: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
       }
-      .posts-container {
+      .card h2 { font-size: 20px; margin-bottom: 1.5rem; color: #333; }
+      .card.full { grid-column: 1 / -1; }
+      .form-group {
+        margin-bottom: 1.5rem;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: #333;
+      }
+      .form-group input, .form-group textarea, .form-group select {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: inherit;
+      }
+      .form-group textarea { resize: vertical; min-height: 80px; }
+      .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+      .topic-item {
+        background: #f9f9f9;
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .topic-item .info { flex: 1; }
+      .topic-item .sector { font-weight: 500; color: #333; margin-bottom: 0.25rem; }
+      .topic-item .message { color: #666; font-size: 14px; }
+      .topic-item button { padding: 0.5rem 0.75rem; font-size: 12px; }
+      .post-item {
+        background: #f9f9f9;
+        padding: 1.5rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+        border-left: 4px solid #667eea;
+      }
+      .post-item .title { font-weight: 600; color: #333; margin-bottom: 0.5rem; }
+      .post-item .date { color: #999; font-size: 12px; margin-bottom: 1rem; }
+      .post-item pre {
         background: white;
         padding: 1rem;
-        border-radius: 6px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      }
-      .post {
-        margin-bottom: 2rem;
-        padding-bottom: 2rem;
-        border-bottom: 1px solid #e1e4e8;
-      }
-      .post:last-child {
-        border-bottom: none;
-      }
-      .post h3 {
-        margin: 0 0 0.5rem 0;
-        color: #24292e;
-      }
-      .post pre {
-        white-space: pre-wrap;
-        background: #f6f8fa;
-        padding: 1rem;
-        border-radius: 6px;
+        border-radius: 4px;
         overflow-x: auto;
-      }
-      .actions {
-        margin-bottom: 2rem;
+        white-space: pre-wrap;
+        font-size: 13px;
       }
       .message {
         padding: 1rem;
         border-radius: 6px;
         margin-bottom: 1rem;
+        display: none;
       }
+      .message.show { display: block; }
       .message.success {
-        background: #dafbe1;
-        color: #033a16;
-        border: 1px solid #26a641;
+        background: #d1fae5;
+        color: #065f46;
+        border: 1px solid #6ee7b7;
       }
       .message.error {
-        background: #ffebe6;
-        color: #82071e;
-        border: 1px solid #da3633;
+        background: #fee2e2;
+        color: #7f1d1d;
+        border: 1px solid #fca5a5;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+      }
+      .stat {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        text-align: center;
+      }
+      .stat .value { font-size: 28px; font-weight: 700; }
+      .stat .label { font-size: 12px; opacity: 0.9; margin-top: 0.5rem; }
+      .loading { color: #999; font-style: italic; }
+      @media (max-width: 768px) {
+        .grid { grid-template-columns: 1fr; }
+        .stats { grid-template-columns: 1fr; }
       }
     </style>
   </head>
   <body>
-    <div class="header">
-      <h1>🤖 LinkedIn AI Autoposter</h1>
-      <div class="auth-section">
-        <div id="auth-status"></div>
-      </div>
-    </div>
-
-    <div id="content">
-      <div class="login-prompt">
-        <p>Loading authentication status...</p>
-      </div>
+    <div class="container">
+      <div id="app"></div>
     </div>
 
     <script>
-      const authStatus = document.getElementById('auth-status');
-      const content = document.getElementById('content');
+      const API_BASE = '';
+      let user = null;
       let authToken = null;
 
       async function checkAuth() {
+        const params = new URLSearchParams(window.location.search);
+        const urlToken = params.get('auth_token');
+        if (urlToken) {
+          authToken = urlToken;
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
         try {
-          // Try to get auth token from URL or cookie
-          const params = new URLSearchParams(window.location.search);
-          const urlToken = params.get('auth_token');
-          if (urlToken) {
-            authToken = urlToken;
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-
-          const res = await fetch('/auth/me' + (authToken ? '?auth_token=' + authToken : ''));
+          const res = await fetch(`${API_BASE}/auth/me${authToken ? '?auth_token=' + authToken : ''}`);
           const data = await res.json();
-
           if (data.ok && data.user) {
-            authToken = authToken || (document.cookie.match(/auth_token=([^;]+)/) || [])[1];
-            showAuthenticated(data.user);
+            user = data.user;
+            renderDashboard();
           } else {
-            showLoginPrompt();
+            renderLogin();
           }
         } catch (err) {
           console.error('Auth check failed:', err);
-          showLoginPrompt();
+          renderLogin();
         }
       }
 
-      function showLoginPrompt() {
-        authStatus.innerHTML = '<button onclick="startLogin()">🔐 Sign in with GitHub</button>';
-        content.innerHTML = `
-          <div class="login-prompt">
-            <h2>Welcome to LinkedIn AI Autoposter</h2>
-            <p>Sign in with GitHub to manage your automated LinkedIn posts.</p>
-            <button onclick="startLogin()" style="padding: 0.75rem 1.5rem; font-size: 16px;">
+      function renderLogin() {
+        document.getElementById('app').innerHTML = `
+          <div class="header">
+            <h1>🚀 LinkedIn AI Autoposter</h1>
+          </div>
+          <div class="login-screen">
+            <h2>Welcome</h2>
+            <p>Sign in with GitHub to manage your automated LinkedIn posts</p>
+            <button class="primary" onclick="startLogin()" style="width: 100%; padding: 1rem;">
               🔐 Sign in with GitHub
             </button>
           </div>
@@ -171,103 +224,142 @@
 
       async function startLogin() {
         try {
-          const res = await fetch('/auth/github');
+          const res = await fetch(`${API_BASE}/auth/github`);
           const data = await res.json();
-          if (data.ok && data.url) {
-            window.location.href = data.url;
-          }
+          if (data.ok && data.url) window.location.href = data.url;
         } catch (err) {
           alert('Login failed: ' + err.message);
         }
       }
 
-      function showAuthenticated(user) {
-        authStatus.innerHTML = `
-          <div class="user-info">
-            <img src="${user.avatar}" alt="${user.login}" class="avatar">
-            <span>${user.login}</span>
-            <button class="logout" onclick="logout()">Logout</button>
-          </div>
-        `;
+      async function renderDashboard() {
+        const [posts, topicsData] = await Promise.all([
+          fetch(`${API_BASE}/api/posts`).then(r => r.json()),
+          fetch(`${API_BASE}/api/topics`).then(r => r.json())
+        ]);
 
-        content.innerHTML = `
-          <div class="actions">
-            <h2>Generate Post</h2>
-            <p>
-              <label>
-                <input type="checkbox" id="publish" checked> Publish to LinkedIn
+        const postCount = posts.length;
+        const nextTopic = topicsData.topics[topicsData.currentIndex] || topicsData.topics[0];
+
+        document.getElementById('app').innerHTML = `
+          <div class="header">
+            <div><h1>🚀 LinkedIn AI Autoposter</h1></div>
+            <div class="right">
+              <div class="user-badge">
+                <img src="${user.avatar}" alt="${user.login}" class="avatar">
+                <span>${user.login}</span>
+              </div>
+              <button class="danger" onclick="logout()">Logout</button>
+            </div>
+          </div>
+
+          <div class="stats">
+            <div class="stat">
+              <div class="value">${postCount}</div>
+              <div class="label">Posts Generated</div>
+            </div>
+            <div class="stat">
+              <div class="value">${topicsData.topics.length}</div>
+              <div class="label">Topics Available</div>
+            </div>
+            <div class="stat">
+              <div class="value">${topicsData.currentIndex + 1}</div>
+              <div class="label">Next Topic #</div>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <h2>⚡ Generate Post</h2>
+              <div id="message" class="message"></div>
+              <div class="form-group">
+                <label>Next Topic</label>
+                <input type="text" value="${nextTopic.sector}" disabled style="background: #f5f5f5;">
+              </div>
+              <div class="form-group">
+                <label>Message</label>
+                <textarea disabled style="background: #f5f5f5;">${nextTopic.message}</textarea>
+              </div>
+              <label style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem;">
+                <input type="checkbox" id="publish" checked>
+                <span style="font-weight: normal;">Test mode (no LinkedIn publish)</span>
               </label>
-            </p>
-            <button class="generate" onclick="generatePost()">Generate & Post</button>
-            <div id="message"></div>
-          </div>
+              <button class="success" onclick="generatePost()" style="width: 100%; padding: 1rem;">
+                🎬 Generate & Preview
+              </button>
+            </div>
 
-          <div class="posts-container">
-            <h2>Generated Posts</h2>
-            <div id="posts">Loading…</div>
+            <div class="card">
+              <h2>📋 Topics (${topicsData.topics.length})</h2>
+              <div style="max-height: 300px; overflow-y: auto;">
+                ${topicsData.topics.map((t, i) => `
+                  <div class="topic-item">
+                    <div class="info">
+                      <div class="sector">${t.sector}</div>
+                      <div class="message">${t.message.substring(0, 50)}...</div>
+                    </div>
+                    <div style="color: ${i === topicsData.currentIndex ? '#667eea' : '#999'}; font-weight: 600;">
+                      #${i + 1} ${i === topicsData.currentIndex ? '(next)' : ''}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="card full">
+              <h2>📝 Generated Posts (${postCount})</h2>
+              <div style="max-height: 500px; overflow-y: auto;">
+                ${postCount === 0 ? '<p class="loading">No posts yet. Generate your first one!</p>' : posts.map(p => `
+                  <div class="post-item">
+                    <div class="title">${escapeHtml(p.filename)}</div>
+                    <div class="date">${new Date(p.date).toLocaleString()}</div>
+                    <pre>${escapeHtml(p.content.replace(/^---[\\s\\S]*?---\\n\\n/, ''))}</pre>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
           </div>
         `;
-
-        loadPosts();
       }
 
       async function generatePost() {
-        const publish = document.getElementById('publish').checked;
         const messageDiv = document.getElementById('message');
-        messageDiv.innerHTML = '<div class="message">Generating post...</div>';
+        messageDiv.classList.remove('success', 'error');
+        messageDiv.innerHTML = '<span class="loading">Generating post...</span>';
 
         try {
-          const res = await fetch('/generate', {
+          const res = await fetch(`${API_BASE}/api/generate`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer ' + authToken
             },
-            body: JSON.stringify({ publish })
+            body: JSON.stringify({ publish: false })
           });
 
-          if (!res.ok) {
-            throw new Error('Failed to generate post');
-          }
-
+          if (!res.ok) throw new Error('Failed to generate');
           const data = await res.json();
-          messageDiv.innerHTML = '<div class="message success">✓ Post generated and ' + (publish ? 'published' : 'saved') + '!</div>';
-          setTimeout(() => loadPosts(), 1000);
+
+          messageDiv.classList.add('success', 'show');
+          messageDiv.innerHTML = '✅ Post generated! Refresh to see it in the list.';
+          setTimeout(() => renderDashboard(), 1500);
         } catch (err) {
-          messageDiv.innerHTML = '<div class="message error">✗ Error: ' + err.message + '</div>';
+          messageDiv.classList.add('error', 'show');
+          messageDiv.innerHTML = '❌ Error: ' + err.message;
         }
       }
 
-      async function loadPosts() {
-        try {
-          const res = await fetch('/posts');
-          const posts = await res.json();
-          const container = document.getElementById('posts');
-          if (!posts.length) {
-            container.innerHTML = '<p>No posts yet.</p>';
-            return;
-          }
-          container.innerHTML = posts.map(p => `
-            <div class="post">
-              <h3>${escapeHtml(p.filename)}</h3>
-              <pre>${escapeHtml(p.content)}</pre>
-            </div>
-          `).join('');
-        } catch (err) {
-          document.getElementById('posts').innerHTML = '<p>Failed to load posts: ' + err.message + '</p>';
-        }
+      async function logout() {
+        await fetch(`${API_BASE}/auth/logout`, { method: 'POST' });
+        user = null;
+        authToken = null;
+        renderLogin();
       }
 
       function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
-      }
-
-      async function logout() {
-        await fetch('/auth/logout', { method: 'POST' });
-        authToken = null;
-        checkAuth();
       }
 
       checkAuth();
