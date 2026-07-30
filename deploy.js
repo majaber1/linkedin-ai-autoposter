@@ -1,25 +1,30 @@
 #!/usr/bin/env node
 
-// Railway deployment helper
-const fs = require('fs');
-const path = require('path');
+// Pre-deployment checklist. Reports what is configured and what is missing
+// for the target you are deploying to.
 
-console.log('📦 LinkedIn AI Autoposter - Railway Deployment');
-console.log('='.repeat(50));
-console.log();
-console.log('✅ Your app is ready to deploy!');
-console.log();
-console.log('🚀 DEPLOY NOW:');
-console.log('   1. Go to: https://railway.app');
-console.log('   2. Click "Start New Project"');
-console.log('   3. Select "Deploy from GitHub"');
-console.log('   4. Connect & select: majaber1/linkedin-ai-autoposter');
-console.log('   5. Railway auto-deploys!');
-console.log();
-console.log('⚙️  THEN SET ENVIRONMENT VARIABLES:');
-console.log('   - GITHUB_CLIENT_ID');
-console.log('   - GITHUB_CLIENT_SECRET');
-console.log('   - GITHUB_REDIRECT_URI (your-app.railway.app/auth/github/callback)');
-console.log();
-console.log('🎉 You\'ll get a live URL in 2-3 minutes!');
-console.log();
+const serverless = Boolean(process.env.VERCEL);
+const rows = [
+  ['OPENAI_API_KEY', process.env.OPENAI_API_KEY, 'AI drafts (falls back to the demo generator)'],
+  ['GITHUB_CLIENT_ID', process.env.GITHUB_CLIENT_ID, 'dashboard sign-in'],
+  ['GITHUB_CLIENT_SECRET', process.env.GITHUB_CLIENT_SECRET, 'dashboard sign-in'],
+  ['GITHUB_REDIRECT_URI', process.env.GITHUB_REDIRECT_URI, 'OAuth callback in production'],
+  ['LINKEDIN_ACCESS_TOKEN', process.env.LINKEDIN_ACCESS_TOKEN, 'publishing'],
+  ['LINKEDIN_PERSON_URN', process.env.LINKEDIN_PERSON_URN, 'publishing'],
+  ['DATABASE_URL', process.env.DATABASE_URL, serverless ? 'REQUIRED on serverless' : 'optional; enables Postgres'],
+  ['AUTOMATION_API_KEY', process.env.AUTOMATION_API_KEY, 'n8n and cron automation'],
+  ['NODE_ENV=production', process.env.NODE_ENV === 'production' || undefined, 'secure cookies, disables demo mode']
+];
+
+console.log('SignalPost deployment check\n');
+for (const [name, value, why] of rows) {
+  console.log(`  ${value ? 'set    ' : 'missing'}  ${name.padEnd(22)} ${why}`);
+}
+
+const blocking = [];
+if (serverless && !process.env.DATABASE_URL) blocking.push('DATABASE_URL is required on Vercel: posts and sessions cannot use the filesystem.');
+if (process.env.DEMO_MODE === 'true' && process.env.NODE_ENV === 'production') blocking.push('DEMO_MODE is ignored in production. Configure GitHub OAuth instead.');
+
+console.log(blocking.length ? `\nBlocking:\n${blocking.map(line => `  - ${line}`).join('\n')}` : '\nNothing blocking.');
+console.log('\nHosts: Railway, Fly.io, Render, or a container work with the filesystem driver.');
+console.log('Vercel and other serverless hosts need DATABASE_URL.');

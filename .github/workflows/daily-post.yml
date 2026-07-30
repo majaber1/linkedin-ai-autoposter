@@ -5,7 +5,7 @@ permissions:
 
 on:
   schedule:
-    - cron: '0 9 * * *' # every day at 09:00 UTC - adjust as desired
+    - cron: '0 5 * * 0,2,4' # Sun/Tue/Thu at 08:00 Asia/Riyadh
   workflow_dispatch:
     inputs:
       test:
@@ -23,7 +23,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install deps
         run: npm install --no-audit --no-fund --silent
@@ -33,8 +33,8 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
           LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
-          DUMMY_MODE: ${{ github.event.inputs.test }}
-          SKIP_PUBLISH: ${{ github.event.inputs.test }}
+          DEMO_MODE: ${{ github.event.inputs.test }}
+          AUTO_PUBLISH: 'false'
         run: npm run generate
 
       - name: Commit generated posts (if any)
@@ -43,7 +43,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add content/posts || true
+          git add content/posts content/last_index.json || true
           if ! git diff --staged --quiet; then
             git commit -m "Add generated post [ci skip]" || true
             git push origin HEAD:${{ github.ref_name }}

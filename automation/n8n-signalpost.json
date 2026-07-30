@@ -1,0 +1,199 @@
+{
+  "name": "SignalPost — draft, remind, publish",
+  "meta": {
+    "description": "Three independent flows against a deployed SignalPost instance. Set the SIGNALPOST_URL and SIGNALPOST_KEY credentials once and all three use them. Nothing publishes that you have not approved in the dashboard first."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 5 * * 0,2,4" }
+          ]
+        }
+      },
+      "id": "cron-draft",
+      "name": "Sun/Tue/Thu 08:00 Riyadh",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-360, -200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SIGNALPOST_URL }}/api/automation/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.SIGNALPOST_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ language: $now.weekday === 2 ? 'Arabic' : 'English', tone: 'authoritative and practical' }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "http-generate",
+      "name": "Generate a draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-120, -200]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.SIGNALPOST_NOTIFY_EMAIL }}",
+        "subject": "=Draft ready for review: {{ $json.post.title }}",
+        "emailFormat": "text",
+        "message": "=A new SignalPost draft is waiting for your approval.\n\nTopic: {{ $json.post.title }}\nLanguage: {{ $json.post.language }}\nLength: {{ $json.post.text.length }} characters\nWritten by: {{ $json.post.provider }}\n\n----\n{{ $json.post.text }}\n----\n\nReview and approve it here: {{ $env.SIGNALPOST_URL }}\n\nNothing is published until you approve it."
+      },
+      "id": "notify-draft",
+      "name": "Email the draft to me",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [140, -200],
+      "notesInFlow": true,
+      "notes": "Swap for Slack, Telegram, or any channel you actually read."
+    },
+
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": 15 }
+          ]
+        }
+      },
+      "id": "cron-publish",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-360, 20]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SIGNALPOST_URL }}/api/automation/publish-due",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.SIGNALPOST_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ limit: 5 }) }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "http-publish-due",
+      "name": "Publish anything scheduled and due",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-120, 20],
+      "notesInFlow": true,
+      "notes": "Only touches posts you approved AND gave a scheduled time. Never publishes a draft."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.processed }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-published",
+      "name": "Anything actually go out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [140, 20]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.SIGNALPOST_NOTIFY_EMAIL }}",
+        "subject": "=SignalPost published {{ $json.processed }} post(s)",
+        "emailFormat": "text",
+        "message": "={{ JSON.stringify($json.results, null, 2) }}"
+      },
+      "id": "notify-published",
+      "name": "Confirm what went out",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [400, -60]
+    },
+
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 6 * * 6" }
+          ]
+        }
+      },
+      "id": "cron-weekly",
+      "name": "Saturday 09:00 Riyadh",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-360, 260]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SIGNALPOST_URL }}/api/automation/pending",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.SIGNALPOST_KEY }}" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "http-pending",
+      "name": "Check what is stuck",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-120, 260]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.SIGNALPOST_NOTIFY_EMAIL }}",
+        "subject": "=SignalPost weekly: {{ $json.drafts }} drafts waiting, {{ $json.failed.length }} failed",
+        "emailFormat": "text",
+        "message": "=Drafts waiting for review: {{ $json.drafts }}\nApproved and queued: {{ $json.approved }}\nFailed to publish: {{ $json.failed.length }}\n\n{{ JSON.stringify($json.failed, null, 2) }}\n\nOpen the desk: {{ $env.SIGNALPOST_URL }}"
+      },
+      "id": "notify-weekly",
+      "name": "Weekly digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [140, 260]
+    }
+  ],
+  "connections": {
+    "Sun/Tue/Thu 08:00 Riyadh": {
+      "main": [[{ "node": "Generate a draft", "type": "main", "index": 0 }]]
+    },
+    "Generate a draft": {
+      "main": [[{ "node": "Email the draft to me", "type": "main", "index": 0 }]]
+    },
+    "Every 15 minutes": {
+      "main": [[{ "node": "Publish anything scheduled and due", "type": "main", "index": 0 }]]
+    },
+    "Publish anything scheduled and due": {
+      "main": [[{ "node": "Anything actually go out?", "type": "main", "index": 0 }]]
+    },
+    "Anything actually go out?": {
+      "main": [[{ "node": "Confirm what went out", "type": "main", "index": 0 }], []]
+    },
+    "Saturday 09:00 Riyadh": {
+      "main": [[{ "node": "Check what is stuck", "type": "main", "index": 0 }]]
+    },
+    "Check what is stuck": {
+      "main": [[{ "node": "Weekly digest", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1", "timezone": "Asia/Riyadh" },
+  "pinData": {}
+}
