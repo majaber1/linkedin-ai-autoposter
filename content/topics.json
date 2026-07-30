@@ -1,37 +1,42 @@
 [
   {
-    "slug": "landing-zone",
-    "sector": "Landing Zone - All Sectors",
-    "message": "PlayMotion is one interactive platform that becomes the perfect fit for any sector - a single landing zone that adapts to Education, Sports, Fitness, Events, Museums, and Gaming Zones."
+    "slug": "cloud-transformation",
+    "title": "Cloud transformation beyond migration",
+    "message": "Explain why operating model, governance, FinOps, security, and team capability matter as much as moving workloads."
   },
   {
-    "slug": "education",
-    "sector": "Education",
-    "message": "How PlayMotion turns classrooms and learning centers into interactive, movement-based learning experiences."
+    "slug": "hybrid-cloud",
+    "title": "Designing a practical hybrid-cloud strategy",
+    "message": "Share a decision framework for placing workloads across on-premises infrastructure and public cloud."
   },
   {
-    "slug": "sports",
-    "sector": "Sports",
-    "message": "How PlayMotion helps sports clubs and academies train smarter with interactive, gamified drills."
+    "slug": "ai-infrastructure",
+    "title": "AI infrastructure readiness",
+    "message": "Discuss the platform, GPU, data, Kubernetes, observability, security, and lifecycle foundations needed before scaling AI."
   },
   {
-    "slug": "fitness",
-    "sector": "Fitness",
-    "message": "How PlayMotion gamifies workouts to boost motivation and engagement in gyms and fitness studios."
+    "slug": "cloud-governance",
+    "title": "Cloud governance that enables delivery",
+    "message": "Show how landing zones, guardrails, identity, networking, and automation can accelerate teams instead of blocking them."
   },
   {
-    "slug": "events",
-    "sector": "Events",
-    "message": "How PlayMotion creates unforgettable interactive attractions for exhibitions, activations, and events."
+    "slug": "infrastructure-leadership",
+    "title": "Modern infrastructure leadership",
+    "message": "Share a practical leadership lesson about reliability, simplification, measurable outcomes, and developing engineering teams."
   },
   {
-    "slug": "museums",
-    "sector": "Museums & Experience Centers",
-    "message": "How PlayMotion brings exhibits to life with interactive, playful storytelling for museums and experience centers."
+    "slug": "kubernetes-platform",
+    "title": "Kubernetes as a platform, not a product",
+    "message": "Explain what organizations must add around Kubernetes: platform ownership, security, observability, developer experience, and operations."
   },
   {
-    "slug": "gaming-zones",
-    "sector": "Gaming Zones",
-    "message": "How PlayMotion powers next-generation gaming zones and entertainment centers with immersive interactive walls."
+    "slug": "resilience",
+    "title": "Resilience is an operating discipline",
+    "message": "Discuss why backups, disaster recovery, testing, dependency mapping, and recovery objectives must be treated as one discipline."
+  },
+  {
+    "slug": "saudi-digital-transformation",
+    "title": "Technology transformation in Saudi Arabia",
+    "message": "Connect cloud and infrastructure modernization to capability building, service quality, and sustainable digital transformation."
   }
 ]

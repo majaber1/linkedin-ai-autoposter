@@ -2,148 +2,221 @@ const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
 const slugify = require('slugify');
+const { store } = require('../lib/store');
+
+// LinkedIn rejects commentary longer than 3000 characters.
+const LINKEDIN_MAX_CHARS = 3000;
 
 const CONTENT_DIR = path.join(__dirname, '..', 'content');
 const TOPICS_FILE = path.join(CONTENT_DIR, 'topics.json');
-const POSTS_DIR = path.join(CONTENT_DIR, 'posts');
-const LAST_INDEX_FILE = path.join(CONTENT_DIR, 'last_index.json');
+
+function readJSON(filePath, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
+
+function demoPost(topic, options = {}) {
+  const language = options.language || topic.language || 'English';
+  const subject = topic.title || topic.sector || 'Cloud transformation';
+  if (language.toLowerCase().startsWith('arab')) {
+    return `التحول التقني الناجح لا يبدأ بشراء منصة جديدة، بل يبدأ بتحديد النتيجة التي نريد تحقيقها.\n\nفي ${subject}، الفرق الحقيقي تصنعه الحوكمة الواضحة، والقياس المستمر، وبناء قدرات الفريق بالتوازي مع التقنية.\n\nما العامل الذي ترونه الأكثر تأثيرًا في نجاح مبادرات التحول؟\n\n#التحول_الرقمي #الحوسبة_السحابية #البنية_التحتية`;
+  }
+  return `Successful technology transformation does not start with buying another platform. It starts with a clearly defined outcome.\n\nIn ${subject}, the strongest results come from combining sound governance, measurable operations, and team capability—not treating technology as a standalone project.\n\nWhat has made the biggest difference in your transformation programs?\n\n#CloudComputing #Infrastructure #DigitalTransformation`;
+}
+
+function buildPrompt(topic, options = {}) {
+  const language = options.language || topic.language || 'English';
+  const tone = options.tone || topic.tone || 'authoritative and practical';
+  const objective = options.objective || 'build professional thought leadership and start useful discussion';
+  return [
+    `Write one LinkedIn post in ${language}.`,
+    `Topic: ${topic.title || topic.sector || 'Technology leadership'}`,
+    `Brief: ${topic.message || topic.brief || ''}`,
+    `Tone: ${tone}. Objective: ${objective}.`,
+    'Audience: technology leaders, cloud architects, infrastructure teams, and decision makers in Saudi Arabia.',
+    'Use a strong opening hook, short readable paragraphs, one practical insight, and a natural closing question.',
+    'Use 3 to 5 relevant hashtags. Do not invent statistics, customer names, certifications, or personal achievements.',
+    'Return only the finished post. Keep it between 700 and 1,300 characters.'
+  ].join('\n');
+}
 
 async function callOpenAI(prompt) {
   const key = process.env.OPENAI_API_KEY;
-  // Allow a safe dummy mode for local testing without keys: set DUMMY_MODE=1
   if (!key) {
-    if (process.env.DUMMY_MODE === '1' || process.env.DUMMY_MODE === 'true') {
-      // simple deterministic placeholder based on prompt
-      const titleMatch = /"title":\s*"([^"]+)"/.exec(prompt);
-      const topicTitle = titleMatch ? titleMatch[1] : 'Daily topic';
-      return `(DUMMY) A short LinkedIn post about ${topicTitle}. What are your thoughts?`;
-    }
-    throw new Error('OPENAI_API_KEY not set');
+    if (/^(1|true)$/i.test(process.env.DEMO_MODE || process.env.DUMMY_MODE || '')) return null;
+    throw new Error('OPENAI_API_KEY is not configured. Enable DEMO_MODE for a safe preview.');
   }
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${key}`
+      Authorization: `Bearer ${key}`
     },
     body: JSON.stringify({
-      model: 'gpt-3.5-turbo',
-      messages: [{ role: 'system', content: 'You are a helpful assistant that writes short on-brand LinkedIn posts.' }, { role: 'user', content: prompt }],
-      max_tokens: 400,
+      model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+      instructions: 'You are an expert LinkedIn editor. Write credible, specific professional content without hype or fabricated facts.',
+      input: prompt,
+      max_output_tokens: 650,
       temperature: 0.7
     })
   });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error('OpenAI error: ' + txt);
-  }
-  const data = await res.json();
-  return data.choices[0].message.content.trim();
+
+  if (!response.ok) throw new Error(`OpenAI request failed (${response.status}): ${await response.text()}`);
+  const data = await response.json();
+  const text = data.output_text || data.output?.flatMap(item => item.content || []).find(item => item.type === 'output_text')?.text;
+  if (!text) throw new Error('The AI provider returned an empty post.');
+  return text.trim();
 }
 
-async function postToLinkedIn(text) {
+async function publishToLinkedIn(text) {
   const token = process.env.LINKEDIN_ACCESS_TOKEN;
-  const author = process.env.LINKEDIN_PERSON_URN; // e.g. urn:li:person:xxxx
-  if (!token || !author) throw new Error('LINKEDIN_ACCESS_TOKEN or LINKEDIN_PERSON_URN not set');
+  const author = process.env.LINKEDIN_PERSON_URN;
+  if (!token || !author) throw new Error('LinkedIn publishing credentials are not configured.');
+  if (!text || !text.trim()) throw new Error('The post is empty.');
+  if (text.length > LINKEDIN_MAX_CHARS) {
+    throw new Error(`The post is ${text.length} characters. LinkedIn allows ${LINKEDIN_MAX_CHARS}.`);
+  }
 
-  const payload = {
-    author: author,
-    lifecycleState: 'PUBLISHED',
-    specificContent: {
-      'com.linkedin.ugc.ShareContent': {
-        shareCommentary: {
-          text: text
-        },
-        shareMediaCategory: 'NONE'
-      }
-    },
-    visibility: {
-      'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC'
-    }
-  };
-
-  const res = await fetch('https://api.linkedin.com/v2/ugcPosts', {
+  const response = await fetch('https://api.linkedin.com/rest/posts', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      'LinkedIn-Version': process.env.LINKEDIN_API_VERSION || '202601',
       'X-Restli-Protocol-Version': '2.0.0'
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      author,
+      commentary: text,
+      visibility: 'PUBLIC',
+      distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+      lifecycleState: 'PUBLISHED',
+      isReshareDisabledByAuthor: false
+    })
   });
 
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error('LinkedIn error: ' + txt);
-  }
-  return await res.json();
+  if (!response.ok) throw new Error(`LinkedIn publish failed (${response.status}): ${await response.text()}`);
+  return { id: response.headers.get('x-restli-id') || null };
 }
 
-function readJSON(filePath) {
-  if (!fs.existsSync(filePath)) return null;
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-}
-
-function writePostToFile(title, text) {
-  if (!fs.existsSync(POSTS_DIR)) fs.mkdirSync(POSTS_DIR, { recursive: true });
+async function savePost({ title, text, topic, status = 'draft', provider = 'demo', linkedinId = null, language = null, scheduledFor = null }) {
   const now = new Date();
-  const date = now.toISOString().slice(0,10);
-  const slug = slugify(title || text.slice(0,40), { lower: true, strict: true });
-  const filename = `${date}-${slug}.md`;
-  const filePath = path.join(POSTS_DIR, filename);
-  const content = `---\ntitle: "${title.replace(/\"/g, '\\"')}"\ndate: "${now.toISOString()}"\n---\n\n${text}\n`;
-  fs.writeFileSync(filePath, content, 'utf8');
-  return filePath;
+  const slug = slugify(title || 'linkedin-post', { lower: true, strict: true }) || 'linkedin-post';
+  const suffix = now.toISOString().replace(/[-:]/g, '').slice(0, 15);
+  const record = {
+    id: `${now.toISOString().slice(0, 10)}-${slug}-${suffix}`,
+    title,
+    text,
+    status,
+    provider,
+    topicSlug: topic?.slug || null,
+    language: language || null,
+    scheduledFor: scheduledFor || null,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    publishedAt: status === 'published' ? now.toISOString() : null,
+    linkedinId
+  };
+  return store.savePost(record);
 }
 
-async function generateAndPost({ publish = true } = {}) {
-  const topics = readJSON(TOPICS_FILE) || [];
-  if (!topics.length) throw new Error('No topics found in content/topics.json');
+function updatePost(id, changes) {
+  const clean = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined));
+  return store.updatePost(id, clean);
+}
 
-  let last = readJSON(LAST_INDEX_FILE) || { index: 0 };
-  const idx = last.index % topics.length;
-  const topic = topics[idx];
+function listPosts() {
+  return store.listPosts();
+}
 
-  const prompt = `Write a short (3-6 sentence) LinkedIn post about the following topic: \n\n${JSON.stringify(topic)}\n\nKeep it professional, engaging, and end with a question to promote comments.`;
-  console.log('Generating post for topic:', topic.title || topic);
-  const postText = await callOpenAI(prompt);
+function getPost(id) {
+  return store.getPost(id);
+}
 
-  const title = (topic.title) ? `${topic.title}` : (typeof topic === 'string' ? topic : 'Daily post');
-  const savedPath = writePostToFile(title, postText);
-  console.log('Saved post to', savedPath);
+function deletePost(id) {
+  return store.deletePost(id);
+}
 
-  last.index = last.index + 1;
-  fs.writeFileSync(LAST_INDEX_FILE, JSON.stringify(last, null, 2), 'utf8');
+function schedulePost(id, scheduledFor) {
+  const when = new Date(scheduledFor);
+  if (Number.isNaN(when.getTime())) throw new Error('The scheduled time is not a valid date.');
+  return store.updatePost(id, { status: 'approved', scheduledFor: when.toISOString() });
+}
 
-  let linkedinResult = null;
-  if (publish) {
+// Publishes every approved post whose scheduled time has passed. Safe to call
+// repeatedly: publishing flips the status, so a post is never sent twice.
+async function publishDuePosts({ limit = 10 } = {}) {
+  const due = await store.listDuePosts(new Date());
+  const results = [];
+  for (const post of due.slice(0, limit)) {
     try {
-      linkedinResult = await postToLinkedIn(postText);
-      console.log('Published to LinkedIn:', JSON.stringify(linkedinResult));
-    } catch (err) {
-      console.error('LinkedIn publish failed:', err.message);
-      // still return success but include error
-      linkedinResult = { error: err.message };
+      const published = await approveAndPublish(post.id, undefined, true);
+      results.push({ id: post.id, status: published.status, linkedinId: published.linkedinId });
+    } catch (error) {
+      results.push({ id: post.id, status: 'failed', error: error.message });
     }
   }
+  return { checked: due.length, processed: results.length, results };
+}
 
-  return { savedPath, postText, linkedinResult };
+async function generateDraft(options = {}) {
+  const topics = readJSON(TOPICS_FILE, []);
+  if (!topics.length) throw new Error('No content topics are configured.');
+  const cursor = await store.getCursor();
+  const index = Number.isInteger(options.topicIndex) ? options.topicIndex : cursor % topics.length;
+  const topic = topics[index];
+  if (!topic) throw new Error('The requested topic does not exist.');
+  const generated = await callOpenAI(buildPrompt(topic, options));
+  const text = generated || demoPost(topic, options);
+  const record = await savePost({
+    title: topic.title || topic.sector || 'LinkedIn post',
+    text,
+    topic,
+    status: 'draft',
+    provider: generated ? 'openai' : 'demo',
+    language: options.language || topic.language || 'English',
+    scheduledFor: options.scheduledFor || null
+  });
+  if (!Number.isInteger(options.topicIndex)) await store.setCursor(cursor + 1);
+  return record;
+}
+
+async function approveAndPublish(id, editedText, shouldPublish = false) {
+  const post = await updatePost(id, {
+    text: editedText?.trim() || undefined,
+    status: shouldPublish ? 'publishing' : 'approved'
+  });
+  if (!shouldPublish) return post;
+  try {
+    const result = await publishToLinkedIn(post.text);
+    return await updatePost(id, {
+      status: 'published', publishedAt: new Date().toISOString(), linkedinId: result.id, error: null
+    });
+  } catch (error) {
+    await updatePost(id, { status: 'failed', error: error.message });
+    throw error;
+  }
+}
+
+async function generateAndPost({ publish = false } = {}) {
+  const draft = await generateDraft();
+  return publish ? approveAndPublish(draft.id, draft.text, true) : draft;
 }
 
 if (require.main === module) {
-  // CLI
-  (async () => {
-    try {
-      const publish = process.env.SKIP_PUBLISH ? false : true;
-      const res = await generateAndPost({ publish });
-      console.log('Done', res.savedPath);
-      process.exit(0);
-    } catch (err) {
-      console.error(err);
-      process.exit(2);
-    }
-  })();
-} else {
-  module.exports = { generateAndPost };
+  generateAndPost({ publish: /^(1|true)$/i.test(process.env.AUTO_PUBLISH || '') })
+    .then(result => console.log(JSON.stringify(result, null, 2)))
+    .catch(error => {
+      console.error(error.message);
+      process.exitCode = 1;
+    });
 }
+
+module.exports = {
+  generateDraft, approveAndPublish, generateAndPost, listPosts, getPost, updatePost,
+  deletePost, schedulePost, publishDuePosts, buildPrompt, demoPost, store, LINKEDIN_MAX_CHARS
+};

@@ -1,368 +1,513 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>LinkedIn AI Autoposter</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
-        padding: 1rem;
-      }
-      .container { max-width: 1200px; margin: 0 auto; }
-      .header {
-        background: white;
-        padding: 2rem;
-        border-radius: 12px;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .header h1 { font-size: 28px; color: #333; }
-      .header .right { display: flex; gap: 1rem; align-items: center; }
-      .user-badge {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        background: #f0f0f0;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-      }
-      .avatar { width: 32px; height: 32px; border-radius: 50%; }
-      button {
-        padding: 0.75rem 1.5rem;
-        border: none;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-      button.primary {
-        background: #667eea;
-        color: white;
-      }
-      button.primary:hover { background: #5568d3; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
-      button.success {
-        background: #10b981;
-        color: white;
-      }
-      button.success:hover { background: #059669; }
-      button.danger {
-        background: #ef4444;
-        color: white;
-      }
-      button.danger:hover { background: #dc2626; }
-      .login-screen {
-        background: white;
-        padding: 3rem;
-        border-radius: 12px;
-        text-align: center;
-        max-width: 400px;
-        margin: 4rem auto;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      }
-      .login-screen h2 { margin-bottom: 1rem; color: #333; }
-      .login-screen p { color: #666; margin-bottom: 2rem; }
-      .grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 2rem;
-        margin-bottom: 2rem;
-      }
-      .card {
-        background: white;
-        padding: 2rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      }
-      .card h2 { font-size: 20px; margin-bottom: 1.5rem; color: #333; }
-      .card.full { grid-column: 1 / -1; }
-      .form-group {
-        margin-bottom: 1.5rem;
-      }
-      .form-group label {
-        display: block;
-        margin-bottom: 0.5rem;
-        font-weight: 500;
-        color: #333;
-      }
-      .form-group input, .form-group textarea, .form-group select {
-        width: 100%;
-        padding: 0.75rem;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        font-size: 14px;
-        font-family: inherit;
-      }
-      .form-group textarea { resize: vertical; min-height: 80px; }
-      .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
-        outline: none;
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-      }
-      .topic-item {
-        background: #f9f9f9;
-        padding: 1rem;
-        border-radius: 6px;
-        margin-bottom: 1rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .topic-item .info { flex: 1; }
-      .topic-item .sector { font-weight: 500; color: #333; margin-bottom: 0.25rem; }
-      .topic-item .message { color: #666; font-size: 14px; }
-      .topic-item button { padding: 0.5rem 0.75rem; font-size: 12px; }
-      .post-item {
-        background: #f9f9f9;
-        padding: 1.5rem;
-        border-radius: 6px;
-        margin-bottom: 1rem;
-        border-left: 4px solid #667eea;
-      }
-      .post-item .title { font-weight: 600; color: #333; margin-bottom: 0.5rem; }
-      .post-item .date { color: #999; font-size: 12px; margin-bottom: 1rem; }
-      .post-item pre {
-        background: white;
-        padding: 1rem;
-        border-radius: 4px;
-        overflow-x: auto;
-        white-space: pre-wrap;
-        font-size: 13px;
-      }
-      .message {
-        padding: 1rem;
-        border-radius: 6px;
-        margin-bottom: 1rem;
-        display: none;
-      }
-      .message.show { display: block; }
-      .message.success {
-        background: #d1fae5;
-        color: #065f46;
-        border: 1px solid #6ee7b7;
-      }
-      .message.error {
-        background: #fee2e2;
-        color: #7f1d1d;
-        border: 1px solid #fca5a5;
-      }
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1rem;
-        margin-bottom: 2rem;
-      }
-      .stat {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        text-align: center;
-      }
-      .stat .value { font-size: 28px; font-weight: 700; }
-      .stat .label { font-size: 12px; opacity: 0.9; margin-top: 0.5rem; }
-      .loading { color: #999; font-style: italic; }
-      @media (max-width: 768px) {
-        .grid { grid-template-columns: 1fr; }
-        .stats { grid-template-columns: 1fr; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div id="app"></div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SignalPost — content review desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#131A24;
+    --ink-2:#3E4B5C;
+    --ink-3:#6B7889;
+    --paper:#EEF1F5;
+    --surface:#FFFFFF;
+    --rule:#D3DAE3;
+    --rule-soft:#E4E9EF;
+    --signal:#1B4FD8;
+    --signal-wash:#EAEFFC;
+    --hold:#9A6510;
+    --hold-wash:#FAF1E0;
+    --live:#0F6B52;
+    --live-wash:#E6F2EE;
+    --fault:#A32116;
+    --fault-wash:#FBEAE8;
+
+    --sans:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+    --arabic:'IBM Plex Sans Arabic','IBM Plex Sans',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+
+    --radius:3px;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font:450 15px/1.55 var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  :focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+  .mono{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    display:flex;align-items:baseline;gap:16px;
+    padding:20px 28px;background:var(--surface);
+    border-bottom:1px solid var(--rule);
+    position:sticky;top:0;z-index:20;flex-wrap:wrap;
+  }
+  .wordmark{font-size:17px;font-weight:600;letter-spacing:-.01em}
+  .wordmark span{color:var(--ink-3);font-weight:450}
+  .masthead .facts{display:flex;gap:18px;margin-left:auto;align-items:center;flex-wrap:wrap}
+  .fact{color:var(--ink-3)}
+  .fact b{color:var(--ink);font-weight:500}
+  .whoami{display:flex;align-items:center;gap:8px;padding-left:18px;border-left:1px solid var(--rule)}
+  .whoami img{width:24px;height:24px;border-radius:50%;background:var(--rule)}
+
+  /* ---------- desk ---------- */
+  .desk{display:grid;grid-template-columns:308px minmax(0,1fr);gap:1px;background:var(--rule);min-height:calc(100vh - 65px)}
+  .brief,.review{padding:24px 28px 56px}
+  .brief{background:var(--surface)}
+  .review{background:var(--paper)}
+
+  h2.eyebrow{
+    font:500 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-3);margin:0 0 16px;padding-bottom:10px;border-bottom:1px solid var(--rule-soft);
+  }
+  h2.eyebrow + .ledger, h2.eyebrow + .sheet{margin-top:0}
+  .review h2.eyebrow:nth-of-type(2){margin-top:32px}
+
+  label{display:block;margin:0 0 6px;font-size:12.5px;font-weight:500;color:var(--ink-2)}
+  .field{margin-bottom:18px}
+  select,input[type=text],input[type=datetime-local],textarea{
+    width:100%;padding:9px 10px;font:450 14px/1.4 var(--sans);color:var(--ink);
+    background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);
+  }
+  select:hover,input:hover,textarea:hover{border-color:var(--ink-3)}
+  .seg{display:flex;border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden}
+  .seg button{
+    flex:1;padding:9px 4px;background:var(--surface);border:0;cursor:pointer;
+    font:500 13px/1 var(--sans);color:var(--ink-2);
+  }
+  .seg button+button{border-left:1px solid var(--rule)}
+  .seg button[aria-pressed=true]{background:var(--signal);color:#fff}
+  .seg button[data-lang=ar]{font-family:var(--arabic)}
+
+  button.act{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    padding:10px 15px;border-radius:var(--radius);cursor:pointer;
+    font:500 13.5px/1 var(--sans);border:1px solid transparent;
+  }
+  button.act[disabled]{opacity:.45;cursor:not-allowed}
+  .act.fill{background:var(--signal);color:#fff}
+  .act.fill:hover:not([disabled]){background:#173FAE}
+  .act.line{background:var(--surface);border-color:var(--rule);color:var(--ink)}
+  .act.line:hover:not([disabled]){border-color:var(--ink-3)}
+  .act.warn{background:var(--surface);border-color:var(--rule);color:var(--fault)}
+  .act.warn:hover:not([disabled]){background:var(--fault-wash);border-color:var(--fault)}
+  .act.wide{width:100%}
+
+  .note{font-size:12px;color:var(--ink-3);margin:10px 0 0}
+
+  /* ---------- signature: lifecycle track ---------- */
+  .track{display:flex;align-items:center;gap:2px}
+  .track i{height:3px;flex:1;background:var(--rule);display:block}
+  .track i.on{background:var(--ink)}
+  .track i.now{background:var(--signal)}
+  .track i.bad{background:var(--fault)}
+  .tracklabels{display:flex;justify-content:space-between;margin-top:6px;gap:4px}
+  .tracklabels span{font:400 9.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .tracklabels span.at{color:var(--ink);font-weight:500}
+
+  /* ---------- draft under review ---------- */
+  .sheet{background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius)}
+  .sheet-top{display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-bottom:1px solid var(--rule-soft);flex-wrap:wrap}
+  .sheet-top h3{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
+  .sheet-id{font:400 10.5px/1.4 var(--mono);color:var(--ink-3);word-break:break-all;margin-top:4px}
+  .chip{
+    padding:3px 8px;border-radius:2px;font:500 10px/1.4 var(--mono);
+    letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;
+  }
+  .chip.draft{background:var(--paper);color:var(--ink-2)}
+  .chip.approved{background:var(--hold-wash);color:var(--hold)}
+  .chip.publishing{background:var(--signal-wash);color:var(--signal)}
+  .chip.published{background:var(--live-wash);color:var(--live)}
+  .chip.failed{background:var(--fault-wash);color:var(--fault)}
+
+  .sheet-body{padding:18px}
+  textarea#body{
+    min-height:250px;resize:vertical;font-size:15px;line-height:1.65;
+  }
+  textarea#body[dir=rtl]{font-family:var(--arabic);text-align:right;line-height:1.9}
+
+  /* capacity gauge — LinkedIn hard-rejects over 3000 characters */
+  .gauge{margin-top:12px}
+  .gauge-rail{height:2px;background:var(--rule-soft);position:relative;overflow:hidden}
+  .gauge-rail b{position:absolute;top:0;bottom:0;left:0;background:var(--ink-3);transition:width .18s ease,background .18s ease}
+  .gauge.near .gauge-rail b{background:var(--hold)}
+  .gauge.over .gauge-rail b{background:var(--fault)}
+  .gauge-read{display:flex;justify-content:space-between;margin-top:6px}
+  .gauge-read span{font:400 10.5px/1 var(--mono);color:var(--ink-3)}
+  .gauge.near .gauge-read span.count{color:var(--hold)}
+  .gauge.over .gauge-read span.count{color:var(--fault);font-weight:500}
+
+  .sheet-foot{display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--rule-soft);flex-wrap:wrap;align-items:center}
+  .sheet-foot .spacer{flex:1}
+  .sched{display:flex;gap:6px;align-items:center}
+  .sched input{width:196px;font-size:12.5px;padding:7px 8px}
+
+  /* ---------- ledger ---------- */
+  .ledger{background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden}
+  .row{display:grid;grid-template-columns:minmax(0,1fr) 128px 56px;gap:14px;align-items:center;
+       padding:13px 18px;border:0;border-bottom:1px solid var(--rule-soft);cursor:pointer;text-align:left;
+       width:100%;background:none;font:inherit;color:inherit}
+  .row:last-child{border-bottom:0}
+  .row:hover{background:var(--paper)}
+  .row[aria-current=true]{background:var(--signal-wash);box-shadow:inset 2px 0 0 var(--signal)}
+  .row-title{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row-meta{font:400 10.5px/1.5 var(--mono);color:var(--ink-3);margin-top:2px}
+  .row-track{min-width:0}
+  .row-when{font:400 10.5px/1 var(--mono);color:var(--ink-3);text-align:right}
+
+  .empty{padding:44px 18px;text-align:center}
+  .empty p{margin:0 0 4px;font-weight:500}
+  .empty span{color:var(--ink-3);font-size:13px}
+
+  /* ---------- toast / gate ---------- */
+  #toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(8px);
+    background:var(--ink);color:#fff;padding:10px 16px;border-radius:var(--radius);
+    font-size:13.5px;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:60;max-width:min(90vw,520px);
+  }
+  #toast.up{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.bad{background:var(--fault)}
+
+  .gate{min-height:100vh;display:grid;place-items:center;padding:24px}
+  .gate-card{background:var(--surface);border:1px solid var(--rule);border-radius:var(--radius);padding:34px;max-width:392px;width:100%}
+  .gate-card h1{margin:0 0 6px;font-size:21px;font-weight:600;letter-spacing:-.015em}
+  .gate-card p.lede{margin:0 0 22px;color:var(--ink-3);font-size:13.5px}
+  .gate-facts{margin:22px 0 0;padding-top:16px;border-top:1px solid var(--rule-soft);display:grid;gap:7px}
+  .gate-facts div{display:flex;justify-content:space-between;gap:12px;font:400 11px/1.4 var(--mono);color:var(--ink-3)}
+  .gate-facts b{color:var(--ink);font-weight:500;text-align:right}
+
+  @media (max-width:860px){
+    .desk{grid-template-columns:1fr}
+    .row{grid-template-columns:minmax(0,1fr) 56px}
+    .row-track{display:none}
+    .masthead{padding:16px 18px}
+    .brief,.review{padding:20px 18px 40px}
+    .sched input{width:150px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const STATES = ['draft','approved','publishing','published'];
+const MAX = 3000;
+const state = { health:null, user:null, topics:[], posts:[], current:null, lang:'English', busy:false };
+
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+const el = id => document.getElementById(id);
+
+function toast(message, bad){
+  const node = el('toast');
+  node.textContent = message;
+  node.className = 'up' + (bad ? ' bad' : '');
+  clearTimeout(node._t);
+  node._t = setTimeout(() => { node.className = ''; }, 4200);
+}
+
+async function api(path, options = {}){
+  const response = await fetch(path, {
+    headers:{'Content-Type':'application/json'},
+    method: options.method,
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+  if (response.status === 401){ state.user = null; render(); throw new Error('Your session ended. Sign in again.'); }
+  const data = await response.json().catch(() => ({ ok:false, error:'The server sent an unreadable response.' }));
+  if (!response.ok || data.ok === false) throw new Error(data.error || 'That request did not go through.');
+  return data;
+}
+
+/* ---------- signature element: the lifecycle track ---------- */
+function track(status){
+  const failed = status === 'failed';
+  const reached = failed ? 3 : STATES.indexOf(status) + 1;
+  return '<div class="track">' + STATES.map((name, index) => {
+    if (failed && index === 2) return '<i class="bad"></i>';
+    if (index < reached - 1) return '<i class="on"></i>';
+    if (index === reached - 1) return '<i class="now"></i>';
+    return '<i></i>';
+  }).join('') + '</div>';
+}
+
+function trackWithLabels(status){
+  const failed = status === 'failed';
+  const labels = failed ? ['draft','approved','failed','—'] : STATES;
+  const at = failed ? 'failed' : status;
+  return track(status) + '<div class="tracklabels">' +
+    labels.map(name => `<span class="${name === at ? 'at' : ''}">${name}</span>`).join('') + '</div>';
+}
+
+/* ---------- render ---------- */
+function render(){
+  el('app').innerHTML = state.user ? deskView() : gateView();
+  state.user ? wireDesk() : wireGate();
+}
+
+function gateView(){
+  const health = state.health || {};
+  return `<div class="gate"><div class="gate-card">
+    <h1>SignalPost</h1>
+    <p class="lede">Draft, review, and approve LinkedIn posts before anything reaches your feed.</p>
+    <button class="act fill wide" id="signin">Sign in with GitHub</button>
+    <p class="note">Nothing publishes without your approval.</p>
+    <div class="gate-facts">
+      <div><span>Content engine</span><b>${esc(health.mode === 'ai' ? 'OpenAI' : 'Demo generator')}</b></div>
+      <div><span>LinkedIn</span><b>${health.linkedinConfigured ? 'Connected' : 'Not configured'}</b></div>
+      <div><span>Storage</span><b>${esc(health.persistence || '—')}${health.durable ? ' · durable' : ''}</b></div>
+      <div><span>Automation</span><b>${health.automationEnabled ? 'Enabled' : 'Off'}</b></div>
     </div>
+  </div></div>`;
+}
 
-    <script>
-      const API_BASE = '';
-      let user = null;
-      let authToken = null;
+function deskView(){
+  const health = state.health || {};
+  const counts = state.posts.reduce((acc, post) => Object.assign(acc, { [post.status]:(acc[post.status]||0)+1 }), {});
+  return `
+  <header class="masthead">
+    <div class="wordmark">SignalPost <span>/ review desk</span></div>
+    <div class="facts">
+      <div class="fact mono">Drafts <b>${counts.draft||0}</b></div>
+      <div class="fact mono">Queued <b>${counts.approved||0}</b></div>
+      <div class="fact mono">Published <b>${counts.published||0}</b></div>
+      ${counts.failed ? `<div class="fact mono" style="color:var(--fault)">Failed <b style="color:var(--fault)">${counts.failed}</b></div>` : ''}
+      <div class="whoami">
+        ${state.user.avatar ? `<img src="${esc(state.user.avatar)}" alt="">` : ''}        <span class="mono">${esc(state.user.login)}</span>
+        <button class="act line" id="signout" style="padding:6px 10px;font-size:12px">Sign out</button>
+      </div>
+    </div>
+  </header>
 
-      async function checkAuth() {
-        const params = new URLSearchParams(window.location.search);
-        const urlToken = params.get('auth_token');
-        if (urlToken) {
-          authToken = urlToken;
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
+  <div class="desk">
+    <aside class="brief">
+      <h2 class="eyebrow">Write a brief</h2>
+      <div class="field">
+        <label for="topic">Topic</label>
+        <select id="topic">${state.topics.map((topic, index) => `<option value="${index}">${esc(topic.title||topic.slug)}</option>`).join('')}</select>
+      </div>
+      <div class="field">
+        <label id="langlabel">Language</label>
+        <div class="seg" role="group" aria-labelledby="langlabel">
+          <button type="button" data-lang="en" aria-pressed="${state.lang==='English'}">English</button>
+          <button type="button" data-lang="ar" aria-pressed="${state.lang==='Arabic'}">العربية</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="tone">Tone</label>
+        <select id="tone">
+          <option value="authoritative and practical">Authoritative and practical</option>
+          <option value="executive">Executive</option>
+          <option value="reflective">Reflective</option>
+          <option value="direct and technical">Direct and technical</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="objective">What should it achieve?</label>
+        <input type="text" id="objective" placeholder="Start a discussion on governance">
+      </div>
+      <button class="act fill wide" id="generate">Generate a draft</button>
+      <p class="note">${health.mode === 'ai' ? 'Drafts are written by OpenAI and saved for your review.' : 'Using the demo generator. Set OPENAI_API_KEY for real drafts.'}</p>
+    </aside>
 
-        try {
-          const res = await fetch(`${API_BASE}/auth/me${authToken ? '?auth_token=' + authToken : ''}`);
-          const data = await res.json();
-          if (data.ok && data.user) {
-            user = data.user;
-            renderDashboard();
-          } else {
-            renderLogin();
-          }
-        } catch (err) {
-          console.error('Auth check failed:', err);
-          renderLogin();
-        }
-      }
+    <main class="review">
+      <h2 class="eyebrow">Under review</h2>
+      ${state.current ? sheetView(state.current) : `<div class="sheet"><div class="empty"><p>Nothing under review</p><span>Write a brief on the left to generate your first draft.</span></div></div>`}
 
-      function renderLogin() {
-        document.getElementById('app').innerHTML = `
-          <div class="header">
-            <h1>🚀 LinkedIn AI Autoposter</h1>
-          </div>
-          <div class="login-screen">
-            <h2>Welcome</h2>
-            <p>Sign in with GitHub to manage your automated LinkedIn posts</p>
-            <button class="primary" onclick="startLogin()" style="width: 100%; padding: 1rem;">
-              🔐 Sign in with GitHub
-            </button>
-          </div>
-        `;
-      }
+      <h2 class="eyebrow">Queue</h2>
+      <div class="ledger">${state.posts.length ? state.posts.map(rowView).join('') : `<div class="empty"><p>The queue is empty</p><span>Generated drafts collect here.</span></div>`}</div>
+    </main>
+  </div>`;
+}
 
-      async function startLogin() {
-        try {
-          const res = await fetch(`${API_BASE}/auth/github`);
-          const data = await res.json();
-          if (data.ok && data.url) window.location.href = data.url;
-        } catch (err) {
-          alert('Login failed: ' + err.message);
-        }
-      }
+function sheetView(post){
+  const rtl = String(post.language||'').toLowerCase().startsWith('arab');
+  const canPublish = (state.health||{}).linkedinConfigured;
+  return `<div class="sheet">
+    <div class="sheet-top">
+      <div style="flex:1;min-width:200px">
+        <h3>${esc(post.title)}</h3>
+        <div class="sheet-id">${esc(post.id)}</div>
+      </div>
+      <span class="chip ${esc(post.status)}">${esc(post.status)}</span>
+      <div style="flex-basis:100%;max-width:340px">${trackWithLabels(post.status)}</div>
+    </div>
+    <div class="sheet-body">
+      <label for="body">Post body${rtl ? ' · Arabic' : ''}</label>
+      <textarea id="body" dir="${rtl?'rtl':'ltr'}" spellcheck="true">${esc(post.text)}</textarea>
+      <div class="gauge" id="gauge">
+        <div class="gauge-rail"><b style="width:0"></b></div>
+        <div class="gauge-read"><span class="count">0</span><span>${MAX} character limit</span></div>
+      </div>
+      ${post.error ? `<p class="note" style="color:var(--fault)">The last attempt failed: ${esc(post.error)}</p>` : ''}
+      ${post.scheduledFor ? `<p class="note">Scheduled for ${esc(new Date(post.scheduledFor).toLocaleString())}.</p>` : ''}
+    </div>
+    <div class="sheet-foot">
+      <button class="act line" id="save">Save edits</button>
+      <button class="act line" id="approve">Approve</button>
+      <div class="sched">
+        <input type="datetime-local" id="when" aria-label="Publish at">
+        <button class="act line" id="schedule">Schedule</button>
+      </div>
+      <div class="spacer"></div>
+      <button class="act line" id="copy">Copy</button>
+      <button class="act warn" id="remove">Delete</button>
+      <button class="act fill" id="publish" ${canPublish?'':'disabled title="Add LINKEDIN_ACCESS_TOKEN and LINKEDIN_PERSON_URN to publish"'}>Publish now</button>
+    </div>
+  </div>`;
+}
 
-      async function renderDashboard() {
-        const [posts, topicsData] = await Promise.all([
-          fetch(`${API_BASE}/api/posts`).then(r => r.json()),
-          fetch(`${API_BASE}/api/topics`).then(r => r.json())
-        ]);
+function rowView(post){
+  return `<button class="row" data-id="${esc(post.id)}" aria-current="${Boolean(state.current && state.current.id===post.id)}">
+    <div>
+      <div class="row-title">${esc(post.title)}</div>
+      <div class="row-meta">${esc(post.status)} · ${(post.text||'').length} chars · ${esc(post.language||'English')}${post.provider==='demo'?' · demo':''}</div>
+    </div>
+    <div class="row-track">${track(post.status)}</div>
+    <div class="row-when">${esc(String(post.createdAt).slice(5,10))}</div>
+  </button>`;
+}
 
-        const postCount = posts.length;
-        const nextTopic = topicsData.topics[topicsData.currentIndex] || topicsData.topics[0];
+/* ---------- capacity gauge ---------- */
+function paintGauge(){
+  const body = el('body');
+  const gauge = el('gauge');
+  if (!body || !gauge) return;
+  const length = body.value.length;
+  gauge.querySelector('b').style.width = Math.min(100, (length / MAX) * 100) + '%';
+  gauge.querySelector('.count').textContent = length.toLocaleString();
+  gauge.className = 'gauge' + (length > MAX ? ' over' : length > MAX * 0.9 ? ' near' : '');
+}
 
-        document.getElementById('app').innerHTML = `
-          <div class="header">
-            <div><h1>🚀 LinkedIn AI Autoposter</h1></div>
-            <div class="right">
-              <div class="user-badge">
-                <img src="${user.avatar}" alt="${user.login}" class="avatar">
-                <span>${user.login}</span>
-              </div>
-              <button class="danger" onclick="logout()">Logout</button>
-            </div>
-          </div>
+/* ---------- actions ---------- */
+async function guard(node, work){
+  if (state.busy) return;
+  state.busy = true;
+  const label = node ? node.textContent : null;
+  if (node){ node.disabled = true; node.textContent = 'Working…'; }
+  try { await work(); }
+  catch (error){ toast(error.message, true); }
+  finally {
+    state.busy = false;
+    if (node && document.body.contains(node)){ node.disabled = false; node.textContent = label; }
+  }
+}
 
-          <div class="stats">
-            <div class="stat">
-              <div class="value">${postCount}</div>
-              <div class="label">Posts Generated</div>
-            </div>
-            <div class="stat">
-              <div class="value">${topicsData.topics.length}</div>
-              <div class="label">Topics Available</div>
-            </div>
-            <div class="stat">
-              <div class="value">${topicsData.currentIndex + 1}</div>
-              <div class="label">Next Topic #</div>
-            </div>
-          </div>
+function wireGate(){
+  const button = el('signin');
+  if (!button) return;
+  button.onclick = () => guard(button, async () => {
+    const { url } = await api('/auth/github');
+    location.href = url;
+  });
+}
 
-          <div class="grid">
-            <div class="card">
-              <h2>⚡ Generate Post</h2>
-              <div id="message" class="message"></div>
-              <div class="form-group">
-                <label>Next Topic</label>
-                <input type="text" value="${nextTopic.sector}" disabled style="background: #f5f5f5;">
-              </div>
-              <div class="form-group">
-                <label>Message</label>
-                <textarea disabled style="background: #f5f5f5;">${nextTopic.message}</textarea>
-              </div>
-              <label style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem;">
-                <input type="checkbox" id="publish" checked>
-                <span style="font-weight: normal;">Test mode (no LinkedIn publish)</span>
-              </label>
-              <button class="success" onclick="generatePost()" style="width: 100%; padding: 1rem;">
-                🎬 Generate & Preview
-              </button>
-            </div>
+function wireDesk(){
+  el('signout').onclick = () => guard(null, async () => {
+    await api('/auth/logout', { method:'POST' });
+    state.user = null; state.current = null; render();
+  });
 
-            <div class="card">
-              <h2>📋 Topics (${topicsData.topics.length})</h2>
-              <div style="max-height: 300px; overflow-y: auto;">
-                ${topicsData.topics.map((t, i) => `
-                  <div class="topic-item">
-                    <div class="info">
-                      <div class="sector">${t.sector}</div>
-                      <div class="message">${t.message.substring(0, 50)}...</div>
-                    </div>
-                    <div style="color: ${i === topicsData.currentIndex ? '#667eea' : '#999'}; font-weight: 600;">
-                      #${i + 1} ${i === topicsData.currentIndex ? '(next)' : ''}
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
+  document.querySelectorAll('[data-lang]').forEach(button => {
+    button.onclick = () => { state.lang = button.dataset.lang === 'ar' ? 'Arabic' : 'English'; render(); };
+  });
 
-            <div class="card full">
-              <h2>📝 Generated Posts (${postCount})</h2>
-              <div style="max-height: 500px; overflow-y: auto;">
-                ${postCount === 0 ? '<p class="loading">No posts yet. Generate your first one!</p>' : posts.map(p => `
-                  <div class="post-item">
-                    <div class="title">${escapeHtml(p.filename)}</div>
-                    <div class="date">${new Date(p.date).toLocaleString()}</div>
-                    <pre>${escapeHtml(p.content.replace(/^---[\\s\\S]*?---\\n\\n/, ''))}</pre>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          </div>
-        `;
-      }
+  el('generate').onclick = event => guard(event.currentTarget, async () => {
+    const { post } = await api('/api/posts/generate', { method:'POST', body:{
+      topicIndex: Number(el('topic').value),
+      language: state.lang,
+      tone: el('tone').value,
+      objective: el('objective').value || undefined
+    }});
+    state.current = post;
+    await refresh();
+    toast('Draft ready for review.');
+  });
 
-      async function generatePost() {
-        const messageDiv = document.getElementById('message');
-        messageDiv.classList.remove('success', 'error');
-        messageDiv.innerHTML = '<span class="loading">Generating post...</span>';
+  document.querySelectorAll('.row').forEach(row => {
+    row.onclick = () => {
+      state.current = state.posts.find(post => post.id === row.dataset.id) || null;
+      render();
+    };
+  });
 
-        try {
-          const res = await fetch(`${API_BASE}/api/generate`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + authToken
-            },
-            body: JSON.stringify({ publish: false })
-          });
+  const body = el('body');
+  if (!body) return;
+  body.oninput = paintGauge;
+  paintGauge();
 
-          if (!res.ok) throw new Error('Failed to generate');
-          const data = await res.json();
+  el('save').onclick = event => guard(event.currentTarget, async () => {
+    const { post } = await api(`/api/posts/${encodeURIComponent(state.current.id)}`, { method:'PATCH', body:{ text: body.value } });
+    state.current = post; await refresh(); toast('Edits saved.');
+  });
 
-          messageDiv.classList.add('success', 'show');
-          messageDiv.innerHTML = '✅ Post generated! Refresh to see it in the list.';
-          setTimeout(() => renderDashboard(), 1500);
-        } catch (err) {
-          messageDiv.classList.add('error', 'show');
-          messageDiv.innerHTML = '❌ Error: ' + err.message;
-        }
-      }
+  el('approve').onclick = event => guard(event.currentTarget, async () => {
+    const { post } = await api(`/api/posts/${encodeURIComponent(state.current.id)}/approve`, { method:'POST', body:{ text: body.value, publish:false } });
+    state.current = post; await refresh(); toast('Approved and queued.');
+  });
 
-      async function logout() {
-        await fetch(`${API_BASE}/auth/logout`, { method: 'POST' });
-        user = null;
-        authToken = null;
-        renderLogin();
-      }
+  el('schedule').onclick = event => guard(event.currentTarget, async () => {
+    const when = el('when').value;
+    if (!when){ toast('Pick a date and time first.', true); return; }
+    const { post } = await api(`/api/posts/${encodeURIComponent(state.current.id)}/schedule`, { method:'POST', body:{ scheduledFor:new Date(when).toISOString() } });
+    state.current = post; await refresh(); toast('Scheduled.');
+  });
 
-      function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-      }
+  el('publish').onclick = event => guard(event.currentTarget, async () => {
+    if (body.value.length > MAX){ toast(`The post is ${body.value.length} characters. LinkedIn allows ${MAX}.`, true); return; }
+    if (!confirm('Publish this post to LinkedIn now? It is public and cannot be undone.')) return;
+    const { post } = await api(`/api/posts/${encodeURIComponent(state.current.id)}/approve`, { method:'POST', body:{ text: body.value, publish:true } });
+    state.current = post; await refresh(); toast('Published to LinkedIn.');
+  });
 
-      checkAuth();
-    </script>
-  </body>
+  el('copy').onclick = async () => {
+    try { await navigator.clipboard.writeText(body.value); toast('Copied.'); }
+    catch { toast('Your browser blocked the clipboard.', true); }
+  };
+
+  el('remove').onclick = event => guard(event.currentTarget, async () => {
+    if (!confirm('Delete this post from the queue?')) return;
+    await api(`/api/posts/${encodeURIComponent(state.current.id)}`, { method:'DELETE' });
+    state.current = null; await refresh(); toast('Deleted.');
+  });
+}
+
+async function refresh(){
+  const { posts } = await api('/api/posts');
+  state.posts = posts;
+  if (state.current) state.current = posts.find(post => post.id === state.current.id) || state.current;
+  render();
+}
+
+async function boot(){
+  try { state.health = await api('/api/health'); } catch {}
+  try {
+    const me = await fetch('/auth/me').then(response => response.json());
+    state.user = me.user || null;
+  } catch {}
+  if (state.user){
+    try {
+      const [topicsData, postsData] = await Promise.all([api('/api/topics'), api('/api/posts')]);
+      state.topics = topicsData.topics;
+      state.posts = postsData.posts;
+      state.current = state.posts.find(post => post.status === 'draft') || null;
+    } catch (error){ toast(error.message, true); }
+  }
+  render();
+}
+
+boot();
+</script>
+</body>
 </html>
