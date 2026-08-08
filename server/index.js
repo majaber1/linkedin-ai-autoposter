@@ -13,7 +13,16 @@ const topics = require('../content/topics.json');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const storeReady = store.init();
+let storeReady;
+function ensureStoreReady() {
+  if (!storeReady) {
+    storeReady = store.init().catch(error => {
+      storeReady = null;
+      throw error;
+    });
+  }
+  return storeReady;
+}
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif']);
 const imageBody = express.raw({ type: ['image/jpeg', 'image/png', 'image/gif'], limit: '20mb' });
 
@@ -27,7 +36,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '100kb' }));
-app.use((req, res, next) => storeReady.then(() => next(), next));
+app.use((req, res, next) => ensureStoreReady().then(() => next(), next));
 app.use(express.static(path.join(__dirname, '..', 'frontend'), { extensions: ['html'] }));
 
 function cookies(req) {
@@ -380,6 +389,6 @@ app.get('/api/automation/pending', requireApiKey, async (req, res) => {
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html')));
 
-if (require.main === module) storeReady.then(() => app.listen(PORT, () => console.log(`LinkedIn Studio running at http://localhost:${PORT} (persistence: ${store.kind})`)))
+if (require.main === module) ensureStoreReady().then(() => app.listen(PORT, () => console.log(`LinkedIn Studio running at http://localhost:${PORT} (persistence: ${store.kind})`)))
   .catch(error => { console.error('Storage init failed:', error.message); process.exit(1); });
 module.exports = app;
