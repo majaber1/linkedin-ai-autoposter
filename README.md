@@ -6,9 +6,9 @@ A human-in-the-loop LinkedIn content studio for generating, reviewing, approving
 
 ## What is included
 
-**New in 2.0** — a redesigned review desk, an MCP server so Claude can drive the
-studio directly, an API-key automation surface for n8n, scheduled publishing,
-and Postgres persistence for serverless hosts.
+**New in 3.0** — a complete SignalPost brand experience, idea-first composer,
+live LinkedIn preview, richer English and Arabic prompting, full RTL support,
+accessible responsive UI, and stricter approval gates for manual and scheduled publishing.
 
 
 - Modern responsive content dashboard
@@ -35,8 +35,9 @@ and Postgres persistence for serverless hosts.
 2. Choose English or Arabic, a tone, and an objective.
 3. Generate a draft.
 4. Review and edit the content.
-5. Approve it for the queue or publish it to LinkedIn.
-6. Keep the generated record in `content/posts`.
+5. Approve it explicitly.
+6. Publish now with confirmation, or schedule it for later.
+7. Keep the generated record in durable storage.
 
 The scheduled workflow generates drafts only. It does not publish unattended.
 
@@ -147,7 +148,8 @@ Manual scheduled run:
 | `GET` | `/api/posts` | Content queue |
 | `POST` | `/api/posts/generate` | Create a draft |
 | `PATCH` | `/api/posts/:id` | Save edits |
-| `POST` | `/api/posts/:id/approve` | Approve or publish |
+| `POST` | `/api/posts/:id/approve` | Approve a reviewed draft |
+| `POST` | `/api/posts/:id/publish` | Publish an approved post with `confirm: true` |
 | `POST` | `/api/posts/:id/schedule` | Queue a post for a specific time |
 | `GET` | `/api/posts/:id` | Read one post |
 | `DELETE` | `/api/posts/:id` | Remove a post |
@@ -206,8 +208,8 @@ Import `automation/n8n-signalpost.json`. It contains three independent flows:
 Set three n8n environment variables: `SIGNALPOST_URL`, `SIGNALPOST_KEY`
 (matching `AUTOMATION_API_KEY`), and `SIGNALPOST_NOTIFY_EMAIL`.
 
-The publish flow only ever touches posts that are already `approved` with a
-`scheduledFor` in the past. It cannot publish a draft, so automation never
+The publish flow only ever touches posts that are `scheduled`, were previously
+approved, and have a `scheduledFor` in the past. It cannot publish a draft, so automation never
 bypasses your review.
 
 Post claims are atomic in PostgreSQL. If scheduler invocations overlap, only one can move an approved post to `publishing`, preventing duplicate LinkedIn posts.
@@ -220,7 +222,7 @@ until `AUTOMATION_API_KEY` is set.
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/automation/generate` | Create a draft, optionally with `scheduledFor` |
-| `POST` | `/api/automation/publish-due` | Publish approved posts whose time has passed |
+| `POST` | `/api/automation/publish-due` | Publish scheduled posts whose time has passed |
 | `GET` | `/api/automation/pending` | Counts plus anything that failed |
 
 ## Docker

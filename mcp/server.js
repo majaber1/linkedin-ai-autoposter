@@ -53,11 +53,11 @@ const TOOLS = [
   },
   {
     name: 'list_posts',
-    description: 'List posts in the content queue, newest first, with their lifecycle status (draft, approved, publishing, published, failed).',
+    description: 'List posts in the content queue, newest first, with their lifecycle status.',
     inputSchema: {
       type: 'object',
       properties: {
-        status: { type: 'string', enum: ['draft', 'approved', 'publishing', 'published', 'failed'], description: 'Optional status filter.' }
+        status: { type: 'string', enum: ['draft', 'approved', 'scheduled', 'publishing', 'published', 'failed'], description: 'Optional status filter.' }
       }
     }
   },
@@ -79,7 +79,12 @@ const TOOLS = [
         topicIndex: { type: 'integer', description: 'Topic index from list_topics. Omit to use the rotating cursor.' },
         language: { type: 'string', enum: ['English', 'Arabic'], description: 'Output language. Defaults to English.' },
         tone: { type: 'string', description: 'For example: executive, practical, reflective.' },
-        objective: { type: 'string', description: 'What the post should achieve.' }
+        objective: { type: 'string', description: 'What the post should achieve.' },
+        audience: { type: 'string', description: 'Who should find the post useful.' },
+        idea: { type: 'string', description: 'Custom topic or idea.' },
+        sourceUrl: { type: 'string', description: 'Optional supporting URL.' },
+        notes: { type: 'string', description: 'Optional facts or context supplied by the owner.' },
+        cta: { type: 'string', description: 'Optional preferred call to action.' }
       }
     }
   },
@@ -169,16 +174,16 @@ const handlers = {
 
   async approve_post({ id, scheduledFor }) {
     if (REMOTE) {
-      return scheduledFor
-        ? (await remote('POST', `/api/posts/${encodeURIComponent(id)}/schedule`, { scheduledFor })).post
-        : (await remote('POST', `/api/posts/${encodeURIComponent(id)}/approve`, { publish: false })).post;
+      const approved = (await remote('POST', `/api/posts/${encodeURIComponent(id)}/approve`, {})).post;
+      return scheduledFor ? (await remote('POST', `/api/posts/${encodeURIComponent(id)}/schedule`, { scheduledFor })).post : approved;
     }
-    return scheduledFor ? local.schedulePost(id, scheduledFor) : local.approveAndPublish(id, undefined, false);
+    const approved = await local.approveAndPublish(id, undefined, false);
+    return scheduledFor ? local.schedulePost(id, scheduledFor) : approved;
   },
 
   async publish_post({ id, confirm }) {
     if (confirm !== true) throw new Error('Publishing was not confirmed. Pass confirm: true to publish to LinkedIn.');
-    if (REMOTE) return (await remote('POST', `/api/posts/${encodeURIComponent(id)}/approve`, { publish: true })).post;
+    if (REMOTE) return (await remote('POST', `/api/posts/${encodeURIComponent(id)}/publish`, { confirm: true })).post;
     return local.approveAndPublish(id, undefined, true);
   },
 

@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const { buildPrompt, demoPost, publishApprovedPost, uploadImageToLinkedIn } = require('../scripts/generate-and-post');
 
 const topic = { title: 'AI infrastructure readiness', message: 'Explain the foundations.' };
@@ -7,8 +8,22 @@ const topic = { title: 'AI infrastructure readiness', message: 'Explain the foun
 test('prompt preserves professional constraints', () => {
   const prompt = buildPrompt(topic, { language: 'English', tone: 'executive' });
   assert.match(prompt, /AI infrastructure readiness/);
-  assert.match(prompt, /Do not invent statistics/);
+  assert.match(prompt, /Never invent facts, statistics/);
   assert.match(prompt, /Saudi Arabia/);
+});
+
+test('V3 prompt preserves owner context without weakening credibility rules', () => {
+  const prompt = buildPrompt(topic, {
+    idea: 'What platform teams should measure', audience: 'Saudi technology executives',
+    objective: 'Share a practical lesson', sourceUrl: 'https://example.com/source',
+    notes: 'Use operational experience, not vendor claims.', cta: 'Ask leaders what they measure.'
+  });
+  assert.match(prompt, /What platform teams should measure/);
+  assert.match(prompt, /Saudi technology executives/);
+  assert.match(prompt, /https:\/\/example.com\/source/);
+  assert.match(prompt, /not vendor claims/);
+  assert.match(prompt, /Ask leaders what they measure/);
+  assert.match(prompt, /not generic or promotional/);
 });
 
 test('demo generator supports English and Arabic', () => {
@@ -60,6 +75,16 @@ test('publishing failures leave a retryable failed state', async () => {
   assert.match(finalChanges.error, /LinkedIn unavailable/);
 });
 
+test('an unapproved draft cannot enter the publishing path', async () => {
+  let publishCalls = 0;
+  const draftStore = { async claimPostForPublishing() { return null; } };
+  await assert.rejects(
+    publishApprovedPost('draft-1', { store: draftStore, publish: async () => { publishCalls += 1; } }),
+    /not approved/
+  );
+  assert.equal(publishCalls, 0);
+});
+
 test('image publishing initializes and uploads the exact bytes', async () => {
   const calls = [];
   const http = async (url, options) => {
@@ -83,4 +108,14 @@ test('image publishing initializes and uploads the exact bytes', async () => {
   assert.equal(JSON.parse(calls[0].options.body).initializeUploadRequest.owner, 'urn:li:person:123');
   assert.equal(calls[1].options.method, 'PUT');
   assert.equal(calls[1].options.body, bytes);
+});
+
+test('V3 interface includes responsive review, preview, image, and RTL controls', () => {
+  const html = fs.readFileSync(require.resolve('../frontend/index.html'), 'utf8');
+  assert.match(html, /Turn expertise into signal/);
+  assert.match(html, /Live preview/);
+  assert.match(html, /Image alt text/);
+  assert.match(html, /dir="\$\{rtl\?'rtl':'ltr'\}"/);
+  assert.match(html, /@media\(max-width:700px\)/);
+  assert.match(html, /Explicit publishing confirmation is required|confirm:true/);
 });
