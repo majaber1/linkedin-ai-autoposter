@@ -7,7 +7,7 @@
     "generate": "node scripts/generate-and-post.js",
     "dev": "nodemon server/index.js",
     "test": "node --test",
-    "check": "node --check server/index.js && node --check scripts/generate-and-post.js && node --check lib/store.js && node --check mcp/server.js",
+    "check": "node --check server/index.js && node --check scripts/generate-and-post.js && node --check lib/store.js && node --check lib/linkedin-auth.js && node --check mcp/server.js",
     "deploy": "node deploy.js",
     "mcp": "node mcp/server.js"
   },
@@ -16,8 +16,9 @@
   },
   "dependencies": {
     "express": "^4.18.2",
+    "image-size": "^2.0.2",
     "node-fetch": "^2.6.7",
-    "slugify": "^1.6.6",
-    "pg": "^8.11.5"
+    "pg": "^8.11.5",
+    "slugify": "^1.6.6"
   }
 }

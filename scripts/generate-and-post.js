@@ -3,6 +3,7 @@ const path = require('path');
 const fetch = require('node-fetch');
 const slugify = require('slugify');
 const { store } = require('../lib/store');
+const { getPublishingCredentials } = require('../lib/linkedin-auth');
 
 // LinkedIn rejects commentary longer than 3000 characters.
 const LINKEDIN_MAX_CHARS = 3000;
@@ -72,14 +73,52 @@ async function callOpenAI(prompt) {
   return text.trim();
 }
 
-async function publishToLinkedIn(text) {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
-  const author = process.env.LINKEDIN_PERSON_URN;
-  if (!token || !author) throw new Error('LinkedIn publishing credentials are not configured.');
+async function uploadImageToLinkedIn(image, credentials, http = fetch) {
+  const version = process.env.LINKEDIN_API_VERSION || '202601';
+  const initialized = await http('https://api.linkedin.com/rest/images?action=initializeUpload', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${credentials.accessToken}`,
+      'Content-Type': 'application/json',
+      'LinkedIn-Version': version,
+      'X-Restli-Protocol-Version': '2.0.0'
+    },
+    body: JSON.stringify({ initializeUploadRequest: { owner: credentials.personUrn } })
+  });
+  if (!initialized.ok) throw new Error(`LinkedIn image initialization failed (${initialized.status}): ${await initialized.text()}`);
+  const payload = await initialized.json();
+  const uploadUrl = payload.value?.uploadUrl;
+  const imageUrn = payload.value?.image;
+  if (!uploadUrl || !imageUrn) throw new Error('LinkedIn did not return an image upload URL.');
+
+  const uploaded = await http(uploadUrl, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${credentials.accessToken}`, 'Content-Type': image.mimeType },
+    body: image.data
+  });
+  if (!uploaded.ok) throw new Error(`LinkedIn image upload failed (${uploaded.status}): ${await uploaded.text()}`);
+  return imageUrn;
+}
+
+async function publishToLinkedIn(text, image = null) {
+  const credentials = await getPublishingCredentials();
+  const token = credentials.accessToken;
+  const author = credentials.personUrn;
   if (!text || !text.trim()) throw new Error('The post is empty.');
   if (text.length > LINKEDIN_MAX_CHARS) {
     throw new Error(`The post is ${text.length} characters. LinkedIn allows ${LINKEDIN_MAX_CHARS}.`);
   }
+
+  const imageUrn = image ? await uploadImageToLinkedIn(image, credentials) : null;
+  const postBody = {
+    author,
+    commentary: text,
+    visibility: 'PUBLIC',
+    distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+    lifecycleState: 'PUBLISHED',
+    isReshareDisabledByAuthor: false
+  };
+  if (imageUrn) postBody.content = { media: { id: imageUrn, altText: image.altText || '' } };
 
   const response = await fetch('https://api.linkedin.com/rest/posts', {
     method: 'POST',
@@ -89,14 +128,7 @@ async function publishToLinkedIn(text) {
       'LinkedIn-Version': process.env.LINKEDIN_API_VERSION || '202601',
       'X-Restli-Protocol-Version': '2.0.0'
     },
-    body: JSON.stringify({
-      author,
-      commentary: text,
-      visibility: 'PUBLIC',
-      distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
-      lifecycleState: 'PUBLISHED',
-      isReshareDisabledByAuthor: false
-    })
+    body: JSON.stringify(postBody)
   });
 
   if (!response.ok) throw new Error(`LinkedIn publish failed (${response.status}): ${await response.text()}`);
@@ -186,18 +218,25 @@ async function generateDraft(options = {}) {
 }
 
 async function approveAndPublish(id, editedText, shouldPublish = false) {
-  const post = await updatePost(id, {
-    text: editedText?.trim() || undefined,
-    status: shouldPublish ? 'publishing' : 'approved'
-  });
-  if (!shouldPublish) return post;
+  if (!shouldPublish) return updatePost(id, { text: editedText?.trim() || undefined, status: 'approved' });
+  if (editedText?.trim()) await updatePost(id, { text: editedText.trim() });
+  return publishApprovedPost(id);
+}
+
+async function publishApprovedPost(id, dependencies = {}) {
+  const activeStore = dependencies.store || store;
+  const publish = dependencies.publish || publishToLinkedIn;
+  const post = await activeStore.claimPostForPublishing(id);
+  if (!post) throw new Error('This post is not approved or is already being published.');
   try {
-    const result = await publishToLinkedIn(post.text);
-    return await updatePost(id, {
+    const image = post.hasImage ? await activeStore.getPostImage(id) : null;
+    if (post.hasImage && !image) throw new Error('The post image is missing from storage. Upload it again.');
+    const result = await publish(post.text, image);
+    return await activeStore.finishPublishing(id, {
       status: 'published', publishedAt: new Date().toISOString(), linkedinId: result.id, error: null
     });
   } catch (error) {
-    await updatePost(id, { status: 'failed', error: error.message });
+    await activeStore.finishPublishing(id, { status: 'failed', error: error.message });
     throw error;
   }
 }
@@ -219,4 +258,5 @@ if (require.main === module) {
 module.exports = {
   generateDraft, approveAndPublish, generateAndPost, listPosts, getPost, updatePost,
   deletePost, schedulePost, publishDuePosts, buildPrompt, demoPost, store, LINKEDIN_MAX_CHARS
+  , publishToLinkedIn, publishApprovedPost, uploadImageToLinkedIn
 };
