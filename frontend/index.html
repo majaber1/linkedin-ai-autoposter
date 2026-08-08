@@ -146,6 +146,12 @@
   .gauge.near .gauge-read span.count{color:var(--hold)}
   .gauge.over .gauge-read span.count{color:var(--fault);font-weight:500}
 
+  .media-box{margin-top:18px;padding:14px;border:1px dashed var(--rule);background:var(--paper)}
+  .media-box img{display:block;max-width:100%;max-height:360px;object-fit:contain;margin:0 auto 12px;border-radius:3px}
+  .media-row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+  .media-row .field{flex:1;min-width:200px;margin:0}
+  .media-file{font-size:12px;max-width:240px}
+
   .sheet-foot{display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--rule-soft);flex-wrap:wrap;align-items:center}
   .sheet-foot .spacer{flex:1}
   .sched{display:flex;gap:6px;align-items:center}
@@ -292,6 +298,7 @@ function deskView(){
 
   <div class="desk">
     <aside class="brief">
+      ${health.linkedinConfigured ? '' : `<button class="act line wide" id="connect-linkedin" style="margin-bottom:18px">Connect LinkedIn</button>`}
       <h2 class="eyebrow">Write a brief</h2>
       <div class="field">
         <label for="topic">Topic</label>
@@ -349,6 +356,14 @@ function sheetView(post){
       <div class="gauge" id="gauge">
         <div class="gauge-rail"><b style="width:0"></b></div>
         <div class="gauge-read"><span class="count">0</span><span>${MAX} character limit</span></div>
+      </div>
+      <div class="media-box">
+        ${post.hasImage ? `<img src="/api/posts/${encodeURIComponent(post.id)}/image?v=${encodeURIComponent(post.updatedAt||'')}" alt="${esc(post.imageAltText||'Post image')}">` : '<p class="note" style="margin:0 0 10px">Add one JPG, PNG, or GIF image (maximum 20 MB).</p>'}
+        <div class="media-row">
+          <div class="field"><label for="image-alt">Image description</label><input id="image-alt" maxlength="4086" value="${esc(post.imageAltText||'')}" placeholder="Describe the image for screen readers"></div>
+          <input class="media-file" id="image-file" type="file" accept="image/jpeg,image/png,image/gif">
+          ${post.hasImage ? '<button class="act warn" id="remove-image">Remove image</button>' : ''}
+        </div>
       </div>
       ${post.error ? `<p class="note" style="color:var(--fault)">The last attempt failed: ${esc(post.error)}</p>` : ''}
       ${post.scheduledFor ? `<p class="note">Scheduled for ${esc(new Date(post.scheduledFor).toLocaleString())}.</p>` : ''}
@@ -414,6 +429,11 @@ function wireGate(){
 }
 
 function wireDesk(){
+  const connectLinkedIn = el('connect-linkedin');
+  if (connectLinkedIn) connectLinkedIn.onclick = () => guard(connectLinkedIn, async () => {
+    const { url } = await api('/auth/linkedin');
+    location.href = url;
+  });
   el('signout').onclick = () => guard(null, async () => {
     await api('/auth/logout', { method:'POST' });
     state.user = null; state.current = null; render();
@@ -447,8 +467,38 @@ function wireDesk(){
   body.oninput = paintGauge;
   paintGauge();
 
+  const imageFile = el('image-file');
+  imageFile.onchange = () => guard(imageFile, async () => {
+    const file = imageFile.files[0];
+    if (!file) return;
+    if (!['image/jpeg','image/png','image/gif'].includes(file.type)) throw new Error('Choose a JPG, PNG, or GIF image.');
+    if (file.size > 20 * 1024 * 1024) throw new Error('The image must be 20 MB or smaller.');
+    const dimensions = await new Promise((resolve, reject) => {
+      const image = new Image();
+      const url = URL.createObjectURL(file);
+      image.onload = () => { URL.revokeObjectURL(url); resolve({ width:image.naturalWidth, height:image.naturalHeight }); };
+      image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('The selected image could not be read.')); };
+      image.src = url;
+    });
+    if (dimensions.width * dimensions.height >= 36152320) throw new Error('The image has too many pixels for LinkedIn.');
+    const response = await fetch(`/api/posts/${encodeURIComponent(state.current.id)}/image`, {
+      method:'PUT',
+      headers:{'Content-Type':file.type, 'X-Image-Name':encodeURIComponent(file.name), 'X-Image-Alt':encodeURIComponent(el('image-alt').value.trim())},
+      body:file
+    });
+    const data = await response.json().catch(() => ({ ok:false, error:'Image upload failed.' }));
+    if (!response.ok || data.ok === false) throw new Error(data.error || 'Image upload failed.');
+    state.current = data.post; await refresh(); toast('Image attached.');
+  });
+
+  const removeImage = el('remove-image');
+  if (removeImage) removeImage.onclick = () => guard(removeImage, async () => {
+    const { post } = await api(`/api/posts/${encodeURIComponent(state.current.id)}/image`, { method:'DELETE' });
+    state.current = post; await refresh(); toast('Image removed.');
+  });
+
   el('save').onclick = event => guard(event.currentTarget, async () => {
-    const { post } = await api(`/api/posts/${encodeURIComponent(state.current.id)}`, { method:'PATCH', body:{ text: body.value } });
+    const { post } = await api(`/api/posts/${encodeURIComponent(state.current.id)}`, { method:'PATCH', body:{ text: body.value, imageAltText:el('image-alt').value } });
     state.current = post; await refresh(); toast('Edits saved.');
   });
 

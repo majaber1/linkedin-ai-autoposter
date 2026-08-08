@@ -20,6 +20,7 @@ and Postgres persistence for serverless hosts.
 - Draft, approved, publishing, published, and failed states
 - Explicit human approval before publishing
 - Current LinkedIn Posts API integration
+- Single-image posts with JPG, PNG, or GIF upload, preview, and alt text
 - GitHub OAuth with state validation and secure cookies
 - GitHub Actions content schedule for Sunday, Tuesday, and Thursday at 08:00 Riyadh time
 - Scheduled publishing with a due-post runner
@@ -67,6 +68,11 @@ DEMO_MODE=true
 | `GITHUB_CLIENT_ID` | For OAuth | GitHub OAuth application ID |
 | `GITHUB_CLIENT_SECRET` | For OAuth | GitHub OAuth secret |
 | `GITHUB_REDIRECT_URI` | Production | Exact OAuth callback URL |
+| `ALLOWED_GITHUB_USERS` | Production | Comma-separated GitHub logins allowed into the dashboard |
+| `LINKEDIN_CLIENT_ID` | Recommended | LinkedIn OAuth application ID |
+| `LINKEDIN_CLIENT_SECRET` | Recommended | LinkedIn OAuth application secret |
+| `LINKEDIN_REDIRECT_URI` | Recommended | Exact LinkedIn OAuth callback URL |
+| `LINKEDIN_TOKEN_ENCRYPTION_KEY` | Recommended | Encrypts stored LinkedIn tokens |
 | `LINKEDIN_ACCESS_TOKEN` | For publishing | LinkedIn OAuth access token with posting permission |
 | `LINKEDIN_PERSON_URN` | For publishing | Author URN such as `urn:li:person:...` |
 | `LINKEDIN_API_VERSION` | No | LinkedIn API version, currently `202601` |
@@ -77,7 +83,9 @@ Never commit real credentials. Store production values in the hosting platform a
 
 ## LinkedIn setup
 
-Create a LinkedIn developer application and complete LinkedIn's required product approval. The access token must have the permission required to create member posts. Add `LINKEDIN_ACCESS_TOKEN` and `LINKEDIN_PERSON_URN` only after the app is approved.
+Create a LinkedIn developer application, enable the Share on LinkedIn product, and obtain `w_member_social`. Configure `https://your-domain.example/auth/linkedin/callback`, set the LinkedIn OAuth variables above, and select **Connect LinkedIn** in the dashboard. Tokens are encrypted before storage. They are refreshed when LinkedIn supplies a refresh token; otherwise the dashboard reports when reconnection is required.
+
+Static `LINKEDIN_ACCESS_TOKEN` and `LINKEDIN_PERSON_URN` values remain supported as a fallback, but expired tokens must be replaced manually.
 
 The dashboard disables the publish button until both LinkedIn values are configured.
 
@@ -89,6 +97,8 @@ Create an OAuth App under GitHub Developer Settings:
 - Callback: `https://your-domain.example/auth/github/callback`
 
 Set the same callback value as `GITHUB_REDIRECT_URI`.
+
+Set `ALLOWED_GITHUB_USERS=majaber1` (or your own comma-separated allowlist). An empty production allowlist denies all GitHub accounts, preventing other users from reaching your shared queue or LinkedIn connection.
 
 ## Persistence and deployment
 
@@ -141,10 +151,15 @@ Manual scheduled run:
 | `POST` | `/api/posts/:id/schedule` | Queue a post for a specific time |
 | `GET` | `/api/posts/:id` | Read one post |
 | `DELETE` | `/api/posts/:id` | Remove a post |
+| `PUT` | `/api/posts/:id/image` | Attach or replace one image |
+| `GET` | `/api/posts/:id/image` | Preview the attached image |
+| `DELETE` | `/api/posts/:id/image` | Remove the attached image |
 
 ## Important production note
 
 AI generation can run immediately with an OpenAI key. Direct LinkedIn publishing depends on LinkedIn developer application approval and valid member-posting permissions; the application cannot bypass that external requirement.
+
+Images are validated by signature, type, size, and pixel count. Filesystem deployments store them under `content/media`; PostgreSQL deployments store them in `post_images`. At publish time SignalPost initializes a LinkedIn image upload, sends the bytes to LinkedIn, and includes the returned Image URN in the Posts API request.
 
 ## Driving the studio from Claude (MCP)
 
@@ -194,6 +209,8 @@ Set three n8n environment variables: `SIGNALPOST_URL`, `SIGNALPOST_KEY`
 The publish flow only ever touches posts that are already `approved` with a
 `scheduledFor` in the past. It cannot publish a draft, so automation never
 bypasses your review.
+
+Post claims are atomic in PostgreSQL. If scheduler invocations overlap, only one can move an approved post to `publishing`, preventing duplicate LinkedIn posts.
 
 ### Automation endpoints
 
