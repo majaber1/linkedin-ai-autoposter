@@ -80,6 +80,45 @@ async function callOpenAI(prompt) {
   return text.trim();
 }
 
+const TRANSFORM_ACTIONS = new Set(['regenerate', 'shorten', 'expand', 'tone', 'translate']);
+
+function buildTransformPrompt(post, action, options = {}) {
+  if (!TRANSFORM_ACTIONS.has(action)) throw new Error('Unsupported draft action.');
+  const instructions = {
+    regenerate: 'Rewrite the post with a fresh structure and hook while preserving its meaning and factual boundaries.',
+    shorten: 'Shorten the post materially. Keep the strongest insight, CTA, and useful hashtags.',
+    expand: 'Expand the post with more useful explanation, without adding invented facts or unsupported claims.',
+    tone: `Rewrite in a ${String(options.tone || 'practical executive').slice(0, 100)} tone.`,
+    translate: `Translate and localize the post into ${options.language === 'Arabic' ? 'natural Arabic business language' : 'natural professional English'}.`
+  };
+  return [
+    instructions[action],
+    'Preserve the original intent, verified details, and call to action. Do not invent statistics, claims, names, or achievements.',
+    'Use short LinkedIn-friendly paragraphs, 3–5 relevant hashtags, no hype, and stay below 3,000 characters.',
+    'Return only the finished post.',
+    `Original post:\n${post.text}`
+  ].join('\n');
+}
+
+async function transformDraft(id, action, options = {}) {
+  const post = await store.getPost(id);
+  if (!['draft', 'failed'].includes(post.status)) throw new Error('Return the post to Draft before changing its content.');
+  const prompt = buildTransformPrompt(post, action, options);
+  let text = await callOpenAI(prompt);
+  if (!text) {
+    if (action === 'shorten') text = post.text.slice(0, Math.max(300, Math.floor(post.text.length * 0.65))).trim();
+    else if (action === 'translate') text = demoPost({ title: post.title }, { language: options.language || 'Arabic' });
+    else text = post.text;
+  }
+  if (!text || text.length > LINKEDIN_MAX_CHARS) throw new Error('The revised post exceeds the LinkedIn character limit.');
+  const revision = { text: post.text, createdAt: new Date().toISOString(), action };
+  return store.updatePost(id, {
+    text, language: action === 'translate' ? options.language : post.language,
+    status: 'draft', approvedAt: null, scheduledFor: null, error: null,
+    revisions: [...(post.revisions || []), revision].slice(-25)
+  });
+}
+
 async function uploadImageToLinkedIn(image, credentials, http = fetch) {
   const version = process.env.LINKEDIN_API_VERSION || '202601';
   const initialized = await http('https://api.linkedin.com/rest/images?action=initializeUpload', {
@@ -159,7 +198,7 @@ async function savePost({ title, text, topic, status = 'draft', provider = 'demo
     updatedAt: now.toISOString(),
     publishedAt: status === 'published' ? now.toISOString() : null,
     linkedinId
-    , brief, approvedAt: null, linkedinUrl: null
+    , brief, approvedAt: null, linkedinUrl: null, revisions: [], publishingAttempts: []
   };
   return store.savePost(record);
 }
@@ -280,6 +319,6 @@ if (require.main === module) {
 
 module.exports = {
   generateDraft, approveAndPublish, generateAndPost, listPosts, getPost, updatePost,
-  deletePost, schedulePost, publishDuePosts, buildPrompt, demoPost, store, LINKEDIN_MAX_CHARS
+  deletePost, schedulePost, publishDuePosts, buildPrompt, buildTransformPrompt, transformDraft, demoPost, store, LINKEDIN_MAX_CHARS
   , publishToLinkedIn, publishApprovedPost, uploadImageToLinkedIn
 };
