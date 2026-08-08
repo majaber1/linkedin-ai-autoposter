@@ -32,16 +32,23 @@ function buildPrompt(topic, options = {}) {
   const language = options.language || topic.language || 'English';
   const tone = options.tone || topic.tone || 'authoritative and practical';
   const objective = options.objective || 'build professional thought leadership and start useful discussion';
+  const audience = options.audience || 'technology leaders, cloud architects, infrastructure teams, and decision makers in Saudi Arabia';
+  const idea = options.idea || topic.title || topic.sector || 'Technology leadership';
   return [
     `Write one LinkedIn post in ${language}.`,
-    `Topic: ${topic.title || topic.sector || 'Technology leadership'}`,
+    `Topic or idea: ${idea}`,
     `Brief: ${topic.message || topic.brief || ''}`,
     `Tone: ${tone}. Objective: ${objective}.`,
-    'Audience: technology leaders, cloud architects, infrastructure teams, and decision makers in Saudi Arabia.',
-    'Use a strong opening hook, short readable paragraphs, one practical insight, and a natural closing question.',
-    'Use 3 to 5 relevant hashtags. Do not invent statistics, customer names, certifications, or personal achievements.',
+    `Audience: ${audience}.`,
+    options.sourceUrl ? `Source URL for context only: ${options.sourceUrl}` : '',
+    options.notes ? `Supporting notes: ${options.notes}` : '',
+    options.cta ? `Preferred call to action: ${options.cta}` : '',
+    'Start with a strong but credible hook. Use short LinkedIn-friendly paragraphs and one specific practical insight.',
+    'Sound natural and experienced, not generic or promotional. Avoid excessive emojis, hashtags, buzzwords, and hype.',
+    'Use natural Arabic business language and RTL-friendly structure when writing Arabic.',
+    'Use 3 to 5 relevant hashtags. Never invent facts, statistics, customer names, certifications, or personal achievements.',
     'Return only the finished post. Keep it between 700 and 1,300 characters.'
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 async function callOpenAI(prompt) {
@@ -135,7 +142,7 @@ async function publishToLinkedIn(text, image = null) {
   return { id: response.headers.get('x-restli-id') || null };
 }
 
-async function savePost({ title, text, topic, status = 'draft', provider = 'demo', linkedinId = null, language = null, scheduledFor = null }) {
+async function savePost({ title, text, topic, status = 'draft', provider = 'demo', linkedinId = null, language = null, scheduledFor = null, brief = null }) {
   const now = new Date();
   const slug = slugify(title || 'linkedin-post', { lower: true, strict: true }) || 'linkedin-post';
   const suffix = now.toISOString().replace(/[-:]/g, '').slice(0, 15);
@@ -152,6 +159,7 @@ async function savePost({ title, text, topic, status = 'draft', provider = 'demo
     updatedAt: now.toISOString(),
     publishedAt: status === 'published' ? now.toISOString() : null,
     linkedinId
+    , brief, approvedAt: null, linkedinUrl: null
   };
   return store.savePost(record);
 }
@@ -173,13 +181,16 @@ function deletePost(id) {
   return store.deletePost(id);
 }
 
-function schedulePost(id, scheduledFor) {
+async function schedulePost(id, scheduledFor) {
   const when = new Date(scheduledFor);
   if (Number.isNaN(when.getTime())) throw new Error('The scheduled time is not a valid date.');
-  return store.updatePost(id, { status: 'approved', scheduledFor: when.toISOString() });
+  if (when <= new Date()) throw new Error('Choose a future publishing time.');
+  const post = await store.getPost(id);
+  if (post.status !== 'approved') throw new Error('Approve this post before scheduling it.');
+  return store.updatePost(id, { status: 'scheduled', scheduledFor: when.toISOString() });
 }
 
-// Publishes every approved post whose scheduled time has passed. Safe to call
+// Publishes every scheduled post whose publishing time has passed. Safe to call
 // repeatedly: publishing flips the status, so a post is never sent twice.
 async function publishDuePosts({ limit = 10 } = {}) {
   const due = await store.listDuePosts(new Date());
@@ -212,14 +223,24 @@ async function generateDraft(options = {}) {
     provider: generated ? 'openai' : 'demo',
     language: options.language || topic.language || 'English',
     scheduledFor: options.scheduledFor || null
+    , brief: {
+      idea: options.idea || null, objective: options.objective || null, audience: options.audience || null,
+      sourceUrl: options.sourceUrl || null, notes: options.notes || null, cta: options.cta || null, tone: options.tone || null
+    }
   });
   if (!Number.isInteger(options.topicIndex)) await store.setCursor(cursor + 1);
   return record;
 }
 
 async function approveAndPublish(id, editedText, shouldPublish = false) {
-  if (!shouldPublish) return updatePost(id, { text: editedText?.trim() || undefined, status: 'approved' });
-  if (editedText?.trim()) await updatePost(id, { text: editedText.trim() });
+  if (!shouldPublish) {
+    const current = await store.getPost(id);
+    if (!['draft', 'failed'].includes(current.status)) throw new Error('Only a reviewed draft or failed post can be approved.');
+    return updatePost(id, {
+      text: editedText?.trim() || undefined, status: 'approved', approvedAt: new Date().toISOString(), scheduledFor: null, error: null
+    });
+  }
+  if (editedText?.trim()) throw new Error('Save edits and approve the post before publishing.');
   return publishApprovedPost(id);
 }
 
@@ -232,8 +253,9 @@ async function publishApprovedPost(id, dependencies = {}) {
     const image = post.hasImage ? await activeStore.getPostImage(id) : null;
     if (post.hasImage && !image) throw new Error('The post image is missing from storage. Upload it again.');
     const result = await publish(post.text, image);
+    const linkedinUrl = result.id ? `https://www.linkedin.com/feed/update/${result.id}/` : null;
     return await activeStore.finishPublishing(id, {
-      status: 'published', publishedAt: new Date().toISOString(), linkedinId: result.id, error: null
+      status: 'published', publishedAt: new Date().toISOString(), linkedinId: result.id, linkedinUrl, error: null
     });
   } catch (error) {
     await activeStore.finishPublishing(id, { status: 'failed', error: error.message });
@@ -243,7 +265,8 @@ async function publishApprovedPost(id, dependencies = {}) {
 
 async function generateAndPost({ publish = false } = {}) {
   const draft = await generateDraft();
-  return publish ? approveAndPublish(draft.id, draft.text, true) : draft;
+  if (publish) throw new Error('Automatic generation cannot publish. Review and approve the saved draft first.');
+  return draft;
 }
 
 if (require.main === module) {

@@ -98,6 +98,7 @@ function rateLimit(windowMs, maximum) {
 
 const authRateLimit = rateLimit(15 * 60 * 1000, 40);
 const generationRateLimit = rateLimit(60 * 1000, 10);
+const publishingRateLimit = rateLimit(60 * 1000, 8);
 
 function allowedGitHubUser(login) {
   const allowed = String(process.env.ALLOWED_GITHUB_USERS || '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean);
@@ -126,12 +127,19 @@ app.get('/api/health', async (req, res, next) => {
   const linkedin = await connectionStatus();
   res.json({
     ok: true,
-    mode: process.env.OPENAI_API_KEY ? 'ai' : 'demo',
+    production: process.env.NODE_ENV === 'production',
+    mode: process.env.OPENAI_API_KEY ? 'ai' : (DEMO_ENABLED ? 'demo' : 'unconfigured'),
+    authenticationConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && process.env.ALLOWED_GITHUB_USERS),
+    databaseConfigured: Boolean(process.env.DATABASE_URL),
+    databaseReachable: true,
+    openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
     linkedinConfigured: linkedin.connected,
     linkedin,
     persistence: store.kind,
     durable: store.kind === 'postgres',
     automationEnabled: Boolean(process.env.AUTOMATION_API_KEY),
+    schedulerConfigured: Boolean(process.env.SIGNALPOST_URL && process.env.AUTOMATION_API_KEY),
+    demoEnabled: DEMO_ENABLED,
     maxChars: LINKEDIN_MAX_CHARS,
     version: require('../package.json').version
   });
@@ -250,11 +258,21 @@ app.get('/api/topics', requireAuth, (req, res) => res.json({ ok: true, topics })
 
 app.post('/api/posts/generate', requireAuth, generationRateLimit, async (req, res) => {
   try {
+    const sourceUrl = String(req.body.sourceUrl || '').trim();
+    if (sourceUrl) {
+      const parsed = new URL(sourceUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Source URL must use http or https.');
+    }
     const result = await generateDraft({
       topicIndex: Number.isInteger(req.body.topicIndex) ? req.body.topicIndex : undefined,
+      idea: String(req.body.idea || '').trim().slice(0, 300),
       language: req.body.language,
-      tone: req.body.tone,
-      objective: req.body.objective
+      tone: String(req.body.tone || '').slice(0, 100),
+      objective: String(req.body.objective || '').slice(0, 300),
+      audience: String(req.body.audience || '').slice(0, 300),
+      sourceUrl,
+      notes: String(req.body.notes || '').slice(0, 4000),
+      cta: String(req.body.cta || '').slice(0, 300)
     });
     res.status(201).json({ ok: true, post: result });
   } catch (error) {
@@ -264,9 +282,16 @@ app.post('/api/posts/generate', requireAuth, generationRateLimit, async (req, re
 
 app.patch('/api/posts/:id', requireAuth, async (req, res) => {
   try {
+    const current = await getPost(req.params.id);
+    const nextAltText = req.body.imageAltText === undefined ? undefined : String(req.body.imageAltText).trim().slice(0, 4086);
+    const contentChanged = (req.body.text !== undefined && String(req.body.text).trim() !== current.text)
+      || (nextAltText !== undefined && nextAltText !== (current.imageAltText || ''));
     const post = await updatePost(req.params.id, {
-      text: String(req.body.text || '').trim(), title: req.body.title,
-      imageAltText: req.body.imageAltText === undefined ? undefined : String(req.body.imageAltText).trim().slice(0, 4086)
+      text: req.body.text === undefined ? undefined : String(req.body.text).trim(), title: req.body.title,
+      imageAltText: nextAltText,
+      status: contentChanged && current.status !== 'draft' ? 'draft' : undefined,
+      approvedAt: contentChanged ? null : undefined,
+      scheduledFor: contentChanged ? null : undefined
     });
     res.json({ ok: true, post });
   } catch (error) {
@@ -276,10 +301,18 @@ app.patch('/api/posts/:id', requireAuth, async (req, res) => {
 
 app.post('/api/posts/:id/approve', requireAuth, async (req, res) => {
   try {
-    if (req.user.demo && req.body?.publish) {
-      return res.status(403).json({ ok: false, error: 'Publishing is disabled for the demo session.' });
-    }
-    const post = await approveAndPublish(req.params.id, req.body?.text, Boolean(req.body?.publish));
+    const post = await approveAndPublish(req.params.id, req.body?.text, false);
+    res.json({ ok: true, post });
+  } catch (error) {
+    res.status(502).json({ ok: false, error: error.message });
+  }
+});
+
+app.post('/api/posts/:id/publish', requireAuth, publishingRateLimit, async (req, res) => {
+  try {
+    if (req.user.demo) return res.status(403).json({ ok: false, error: 'Publishing is disabled in demo mode.' });
+    if (req.body?.confirm !== true) return res.status(400).json({ ok: false, error: 'Explicit publishing confirmation is required.' });
+    const post = await approveAndPublish(req.params.id, undefined, true);
     res.json({ ok: true, post });
   } catch (error) {
     res.status(502).json({ ok: false, error: error.message });
@@ -324,7 +357,8 @@ app.put('/api/posts/:id/image', requireAuth, imageBody, async (req, res) => {
     }
     const altText = decodeURIComponent(String(req.get('x-image-alt') || '')).trim().slice(0, 4086);
     const name = decodeURIComponent(String(req.get('x-image-name') || 'image')).slice(0, 200);
-    const post = await store.savePostImage(req.params.id, { data: req.body, mimeType, altText, name });
+    let post = await store.savePostImage(req.params.id, { data: req.body, mimeType, altText, name });
+    if (post.status !== 'draft') post = await updatePost(req.params.id, { status: 'draft', approvedAt: null, scheduledFor: null });
     res.json({ ok: true, post });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
@@ -345,7 +379,9 @@ app.get('/api/posts/:id/image', requireAuth, async (req, res) => {
 
 app.delete('/api/posts/:id/image', requireAuth, async (req, res) => {
   try {
-    res.json({ ok: true, post: await store.deletePostImage(req.params.id) });
+    let post = await store.deletePostImage(req.params.id);
+    if (post.status !== 'draft') post = await updatePost(req.params.id, { status: 'draft', approvedAt: null, scheduledFor: null });
+    res.json({ ok: true, post });
   } catch (error) {
     res.status(404).json({ ok: false, error: error.message });
   }
@@ -357,9 +393,14 @@ app.post('/api/automation/generate', requireApiKey, async (req, res) => {
   try {
     const post = await generateDraft({
       topicIndex: Number.isInteger(req.body.topicIndex) ? req.body.topicIndex : undefined,
+      idea: req.body.idea,
       language: req.body.language,
       tone: req.body.tone,
       objective: req.body.objective,
+      audience: req.body.audience,
+      sourceUrl: req.body.sourceUrl,
+      notes: req.body.notes,
+      cta: req.body.cta,
       scheduledFor: req.body.scheduledFor
     });
     res.status(201).json({ ok: true, post });
@@ -382,8 +423,9 @@ app.get('/api/automation/pending', requireApiKey, async (req, res) => {
     ok: true,
     drafts: posts.filter(p => p.status === 'draft').length,
     approved: posts.filter(p => p.status === 'approved').length,
+    scheduled: posts.filter(p => p.status === 'scheduled').length,
     failed: posts.filter(p => p.status === 'failed').map(p => ({ id: p.id, error: p.error })),
-    posts: posts.filter(p => p.status === 'draft' || p.status === 'failed').slice(0, 20)
+    posts: posts.filter(p => ['draft', 'scheduled', 'failed'].includes(p.status)).slice(0, 20)
   });
 });
 
