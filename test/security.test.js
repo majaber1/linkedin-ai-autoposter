@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { filesystemDriver } = require('../lib/store');
+const { filesystemDriver, normalizeDatabaseUrl } = require('../lib/store');
 const { encrypt, decrypt } = require('../lib/linkedin-auth');
 const app = require('../server/index');
 
@@ -10,6 +10,17 @@ test('OAuth state is single-use and unknown states are rejected', async () => {
   assert.equal(await store.consumeOAuthState('valid-state'), true);
   assert.equal(await store.consumeOAuthState('valid-state'), false);
   assert.equal(await store.consumeOAuthState('unknown-state'), false);
+});
+
+test('database TLS modes are normalized to strict certificate verification', () => {
+  assert.equal(
+    normalizeDatabaseUrl('postgres://db.example/app?sslmode=require'),
+    'postgres://db.example/app?sslmode=verify-full'
+  );
+  assert.equal(
+    normalizeDatabaseUrl('postgres://localhost/app?sslmode=disable'),
+    'postgres://localhost/app?sslmode=disable'
+  );
 });
 
 test('automation API keys require an exact timing-safe match', () => {
