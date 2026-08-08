@@ -2,10 +2,10 @@ const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const fetch = require('node-fetch');
-const { imageSize } = require('image-size');
+const { readImageDimensions } = require('../lib/image-validation');
 const {
   generateDraft, approveAndPublish, listPosts, getPost, updatePost,
-  deletePost, schedulePost, publishDuePosts, LINKEDIN_MAX_CHARS
+  deletePost, schedulePost, publishDuePosts, transformDraft, LINKEDIN_MAX_CHARS
 } = require('../scripts/generate-and-post');
 const { store } = require('../lib/store');
 const { saveCredentials, connectionStatus } = require('../lib/linkedin-auth');
@@ -14,9 +14,20 @@ const topics = require('../content/topics.json');
 const app = express();
 const PORT = process.env.PORT || 3000;
 let storeReady;
+function productionConfigErrors(env = process.env) {
+  if (env.NODE_ENV !== 'production') return [];
+  const required = ['DATABASE_URL', 'GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_REDIRECT_URI', 'ALLOWED_GITHUB_USERS'];
+  const missing = required.filter(name => !String(env[name] || '').trim());
+  const linkedinOAuth = env.LINKEDIN_CLIENT_ID || env.LINKEDIN_CLIENT_SECRET || env.LINKEDIN_REDIRECT_URI;
+  if (linkedinOAuth && !env.LINKEDIN_TOKEN_ENCRYPTION_KEY) missing.push('LINKEDIN_TOKEN_ENCRYPTION_KEY');
+  return missing;
+}
 function ensureStoreReady() {
   if (!storeReady) {
-    storeReady = store.init().catch(error => {
+    const missing = productionConfigErrors();
+    storeReady = (missing.length
+      ? Promise.reject(new Error(`Production configuration is incomplete: ${missing.join(', ')}`))
+      : store.init()).catch(error => {
       storeReady = null;
       throw error;
     });
@@ -25,6 +36,18 @@ function ensureStoreReady() {
 }
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif']);
 const imageBody = express.raw({ type: ['image/jpeg', 'image/png', 'image/gif'], limit: '20mb' });
+
+function validateImage(data, mimeType) {
+  if (!IMAGE_TYPES.has(mimeType)) throw new Error('Use a JPG, PNG, or GIF image.');
+  if (!Buffer.isBuffer(data) || !data.length) throw new Error('The image is empty.');
+  const dimensions = readImageDimensions(data);
+  const detectedMime = dimensions.type === 'jpg' ? 'image/jpeg' : `image/${dimensions.type}`;
+  if (detectedMime !== mimeType) throw new Error('The file content does not match its image type.');
+  if (!dimensions.width || !dimensions.height || dimensions.width * dimensions.height >= 36152320) {
+    throw new Error('The image has too many pixels for LinkedIn.');
+  }
+  return dimensions;
+}
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
@@ -291,11 +314,27 @@ app.patch('/api/posts/:id', requireAuth, async (req, res) => {
       imageAltText: nextAltText,
       status: contentChanged && current.status !== 'draft' ? 'draft' : undefined,
       approvedAt: contentChanged ? null : undefined,
-      scheduledFor: contentChanged ? null : undefined
+      scheduledFor: contentChanged ? null : undefined,
+      revisions: contentChanged ? [...(current.revisions || []), {
+        text: current.text, createdAt: new Date().toISOString(), action: 'manual-edit'
+      }].slice(-25) : undefined
     });
     res.json({ ok: true, post });
   } catch (error) {
     res.status(404).json({ ok: false, error: error.message });
+  }
+});
+
+app.post('/api/posts/:id/transform', requireAuth, generationRateLimit, async (req, res) => {
+  try {
+    const action = String(req.body?.action || '');
+    const post = await transformDraft(req.params.id, action, {
+      tone: String(req.body?.tone || '').slice(0, 100),
+      language: req.body?.language === 'Arabic' ? 'Arabic' : 'English'
+    });
+    res.json({ ok: true, post });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
   }
 });
 
@@ -347,14 +386,7 @@ app.post('/api/posts/:id/schedule', requireAuth, async (req, res) => {
 app.put('/api/posts/:id/image', requireAuth, imageBody, async (req, res) => {
   try {
     const mimeType = String(req.get('content-type') || '').split(';')[0].toLowerCase();
-    if (!IMAGE_TYPES.has(mimeType)) return res.status(415).json({ ok: false, error: 'Use a JPG, PNG, or GIF image.' });
-    if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ ok: false, error: 'The image is empty.' });
-    const dimensions = imageSize(req.body);
-    const detectedMime = dimensions.type === 'jpg' ? 'image/jpeg' : `image/${dimensions.type}`;
-    if (detectedMime !== mimeType) return res.status(415).json({ ok: false, error: 'The file content does not match its image type.' });
-    if (!dimensions.width || !dimensions.height || dimensions.width * dimensions.height >= 36152320) {
-      return res.status(413).json({ ok: false, error: 'The image has too many pixels for LinkedIn.' });
-    }
+    validateImage(req.body, mimeType);
     const altText = decodeURIComponent(String(req.get('x-image-alt') || '')).trim().slice(0, 4086);
     const name = decodeURIComponent(String(req.get('x-image-name') || 'image')).slice(0, 200);
     let post = await store.savePostImage(req.params.id, { data: req.body, mimeType, altText, name });
@@ -430,6 +462,8 @@ app.get('/api/automation/pending', requireApiKey, async (req, res) => {
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html')));
+
+app.locals.security = { apiKeyMatches, allowedGitHubUser, validateImage, productionConfigErrors };
 
 if (require.main === module) ensureStoreReady().then(() => app.listen(PORT, () => console.log(`LinkedIn Studio running at http://localhost:${PORT} (persistence: ${store.kind})`)))
   .catch(error => { console.error('Storage init failed:', error.message); process.exit(1); });

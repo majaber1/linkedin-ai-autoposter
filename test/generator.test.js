@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { buildPrompt, demoPost, publishApprovedPost, uploadImageToLinkedIn } = require('../scripts/generate-and-post');
+const { buildPrompt, buildTransformPrompt, demoPost, publishApprovedPost, uploadImageToLinkedIn } = require('../scripts/generate-and-post');
 
 const topic = { title: 'AI infrastructure readiness', message: 'Explain the foundations.' };
 
@@ -29,6 +29,16 @@ test('V3 prompt preserves owner context without weakening credibility rules', ()
 test('demo generator supports English and Arabic', () => {
   assert.match(demoPost(topic, { language: 'English' }), /#CloudComputing/);
   assert.match(demoPost(topic, { language: 'Arabic' }), /#الحوسبة_السحابية/);
+});
+
+test('draft transformations preserve facts and support all V3 editing actions', () => {
+  const post = { text: 'A verified operational lesson.', language: 'English' };
+  for (const action of ['regenerate', 'shorten', 'expand', 'tone', 'translate']) {
+    const prompt = buildTransformPrompt(post, action, { tone: 'reflective', language: 'Arabic' });
+    assert.match(prompt, /Do not invent statistics/);
+    assert.match(prompt, /A verified operational lesson/);
+  }
+  assert.throws(() => buildTransformPrompt(post, 'publish'), /Unsupported/);
 });
 
 test('concurrent publishers claim an approved post only once', async () => {

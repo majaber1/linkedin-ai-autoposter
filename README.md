@@ -17,6 +17,7 @@ accessible responsive UI, and stricter approval gates for manual and scheduled p
 - OpenAI Responses API integration
 - Safe demo generator when no AI key is available
 - Editable post preview and content queue
+- One-click regenerate, shorten, expand, tone-change, and Arabic/English translation actions
 - Draft, approved, publishing, published, and failed states
 - Explicit human approval before publishing
 - Current LinkedIn Posts API integration
@@ -40,6 +41,9 @@ accessible responsive UI, and stricter approval gates for manual and scheduled p
 7. Keep the generated record in durable storage.
 
 The scheduled workflow generates drafts only. It does not publish unattended.
+
+Every content change stores a bounded revision history. Publishing claims and final
+results are recorded as attempts, making retries auditable without allowing duplicate sends.
 
 ## Local setup
 
@@ -231,3 +235,18 @@ until `AUTOMATION_API_KEY` is set.
 docker build -t signalpost .
 docker run -p 3000:3000 --env-file .env signalpost
 ```
+
+## Go Live Checklist
+
+- [ ] Add Production and Preview environment variables in Vercel; never commit `.env` files.
+- [ ] Set the GitHub callback to `https://YOUR_DOMAIN/auth/github/callback` and restrict `ALLOWED_GITHUB_USERS`.
+- [ ] Confirm `/api/health` reports production, durable database, and authentication as configured.
+- [ ] Add `OPENAI_API_KEY` and verify one private English and Arabic draft.
+- [ ] Add the LinkedIn OAuth callback `https://YOUR_DOMAIN/auth/linkedin/callback`, enable member posting, and connect from the dashboard.
+- [ ] Store `SIGNALPOST_URL` and `AUTOMATION_API_KEY` as GitHub Actions secrets or configure the included n8n workflow.
+- [ ] Upload a test image and alt text, approve and schedule it, then verify it survives refresh.
+- [ ] Publish only after reviewing the exact final post and confirming the LinkedIn account.
+
+If a secret is exposed, revoke or rotate it at the provider, replace it in Vercel/GitHub,
+and redeploy. LinkedIn posting remains dependent on LinkedIn approving the application
+and granting `w_member_social`; SignalPost cannot bypass that external requirement.

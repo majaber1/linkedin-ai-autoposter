@@ -1,52 +1,57 @@
-name: Daily LinkedIn Post
-
-permissions:
-  contents: write
+name: SignalPost Automation
 
 on:
   schedule:
-    - cron: '0 5 * * 0,2,4' # Sun/Tue/Thu at 08:00 Asia/Riyadh
+    - cron: '0 5 * * 0,2,4' # Drafts: Sun/Tue/Thu 08:00 Asia/Riyadh
+    - cron: '*/15 * * * *'  # Publish approved, due schedules
+    - cron: '0 6 * * 6'     # Weekly status: Saturday 09:00 Asia/Riyadh
   workflow_dispatch:
     inputs:
-      test:
-        description: 'Run in test (dummy) mode (true/false)'
-        required: false
-        default: 'false'
+      operation:
+        description: Operation to run
+        required: true
+        type: choice
+        options: [generate, publish-due, status]
+        default: status
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-post:
+  call-signalpost:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install deps
-        run: npm install --no-audit --no-fund --silent
-
-      - name: Run daily generator and post
+      - name: Select safe automation operation
+        id: operation
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
-          LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
-          DEMO_MODE: ${{ github.event.inputs.test }}
-          AUTO_PUBLISH: 'false'
-        run: npm run generate
-
-      - name: Commit generated posts (if any)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MANUAL_OPERATION: ${{ inputs.operation }}
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add content/posts content/last_index.json || true
-          if ! git diff --staged --quiet; then
-            git commit -m "Add generated post [ci skip]" || true
-            git push origin HEAD:${{ github.ref_name }}
+          if [ -n "$MANUAL_OPERATION" ]; then operation="$MANUAL_OPERATION"
+          elif [ "$SCHEDULE" = "0 5 * * 0,2,4" ]; then operation="generate"
+          elif [ "$SCHEDULE" = "*/15 * * * *" ]; then operation="publish-due"
+          else operation="status"
+          fi
+          echo "operation=$operation" >> "$GITHUB_OUTPUT"
+
+      - name: Call authenticated production API
+        env:
+          SIGNALPOST_URL: ${{ secrets.SIGNALPOST_URL }}
+          SIGNALPOST_KEY: ${{ secrets.AUTOMATION_API_KEY }}
+          OPERATION: ${{ steps.operation.outputs.operation }}
+        run: |
+          test -n "$SIGNALPOST_URL" && test -n "$SIGNALPOST_KEY"
+          if [ "$OPERATION" = "generate" ]; then
+            curl --fail-with-body --silent --show-error \
+              -X POST "$SIGNALPOST_URL/api/automation/generate" \
+              -H "x-api-key: $SIGNALPOST_KEY" -H "content-type: application/json" \
+              --data '{"objective":"Share a practical lesson","audience":"Technology leaders in Saudi Arabia"}'
+          elif [ "$OPERATION" = "publish-due" ]; then
+            curl --fail-with-body --silent --show-error \
+              -X POST "$SIGNALPOST_URL/api/automation/publish-due" \
+              -H "x-api-key: $SIGNALPOST_KEY" -H "content-type: application/json" \
+              --data '{"limit":10}'
           else
-            echo "No changes to commit"
+            curl --fail-with-body --silent --show-error \
+              "$SIGNALPOST_URL/api/automation/pending" -H "x-api-key: $SIGNALPOST_KEY"
           fi
