@@ -10,6 +10,7 @@ const {
 const { store } = require('../lib/store');
 const { saveCredentials, connectionStatus } = require('../lib/linkedin-auth');
 const { reportError } = require('../lib/error-reporting');
+const { channelCatalog } = require('../lib/channels');
 const topics = require('../content/topics.json');
 
 const DEFAULT_SETTINGS = {
@@ -305,6 +306,7 @@ app.post('/auth/logout', async (req, res) => {
 
 app.get('/api/posts', requireAuth, async (req, res) => res.json({ ok: true, posts: await listPosts() }));
 app.get('/api/topics', requireAuth, async (req, res) => res.json({ ok: true, topics: (await workspaceConfig()).pillars }));
+app.get('/api/channels', requireAuth, (req, res) => res.json({ ok: true, channels: channelCatalog() }));
 app.get('/api/workspace', requireAuth, async (req, res) => res.json({ ok: true, ...(await workspaceConfig()) }));
 app.put('/api/workspace/pillars', requireAuth, async (req, res) => {
   try {
