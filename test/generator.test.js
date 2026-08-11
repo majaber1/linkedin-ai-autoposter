@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { buildPrompt, buildTransformPrompt, demoPost, publishApprovedPost, uploadImageToLinkedIn } = require('../scripts/generate-and-post');
+const { buildPrompt, buildTransformPrompt, buildImagePrompt, callOpenAIImage, generateImageForPost, demoPost, publishApprovedPost, uploadImageToLinkedIn } = require('../scripts/generate-and-post');
 
 const topic = { title: 'AI infrastructure readiness', message: 'Explain the foundations.' };
 
@@ -120,11 +120,50 @@ test('image publishing initializes and uploads the exact bytes', async () => {
   assert.equal(calls[1].options.body, bytes);
 });
 
+test('image generation uses the OpenAI image endpoint and decodes the result', async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = 'test-key';
+  let request;
+  try {
+    const result = await callOpenAIImage('Professional cloud illustration', async (url, options) => {
+      request = { url, options };
+      return { ok: true, json: async () => ({ data: [{ b64_json: Buffer.from('png-bytes').toString('base64') }] }) };
+    });
+    assert.match(request.url, /\/v1\/images\/generations$/);
+    assert.equal(JSON.parse(request.options.body).model, 'gpt-image-1');
+    assert.equal(result.mimeType, 'image/png');
+    assert.equal(result.data.toString(), 'png-bytes');
+  } finally {
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  }
+});
+
+test('generated images are stored against reviewable posts', async () => {
+  let saved;
+  const fakeStore = {
+    async getPost() { return { id: 'draft-1', status: 'draft', title: 'Cloud operations', text: 'A practical platform lesson.' }; },
+    async savePostImage(id, image) { saved = { id, image }; return { id, status: 'draft', hasImage: true }; }
+  };
+  const post = await generateImageForPost('draft-1', { direction: 'editorial blue' }, {
+    store: fakeStore,
+    generate: async prompt => {
+      assert.match(prompt, /editorial blue/);
+      return { data: Buffer.from('generated'), mimeType: 'image/png' };
+    }
+  });
+  assert.equal(post.hasImage, true);
+  assert.equal(saved.image.mimeType, 'image/png');
+  assert.match(buildImagePrompt({ title: 'AI platforms', text: 'Useful context' }), /square 1:1/);
+});
+
 test('V3 interface includes responsive review, preview, image, and RTL controls', () => {
   const html = fs.readFileSync(require.resolve('../frontend/index.html'), 'utf8');
   assert.match(html, /Turn expertise into signal/);
   assert.match(html, /Live preview/);
   assert.match(html, /Image alt text/);
+  assert.match(html, /Generate AI image/);
+  assert.match(html, /id="channels-nav"/);
   assert.match(html, /dir="\$\{rtl\?'rtl':'ltr'\}"/);
   assert.match(html, /@media\(max-width:700px\)/);
   assert.match(html, /Explicit publishing confirmation is required|confirm:true/);

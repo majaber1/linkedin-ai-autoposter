@@ -80,6 +80,54 @@ async function callOpenAI(prompt) {
   return text.trim();
 }
 
+function buildImagePrompt(post, direction = '') {
+  return [
+    'Create a polished editorial image for a professional social media post.',
+    `Post topic: ${post.title || 'Technology leadership'}.`,
+    `Post context: ${String(post.text || '').slice(0, 1800)}.`,
+    direction ? `Creative direction: ${direction}.` : '',
+    'Do not place words, captions, logos, watermarks, UI, or brand marks in the image.',
+    'Use a credible modern technology editorial style, strong composition, subtle depth, and professional lighting.',
+    'Avoid stock-photo clichés, illegible diagrams, exaggerated science-fiction imagery, and unsupported factual claims.',
+    'Compose for a square 1:1 social feed image with a clear central subject and safe margins.'
+  ].filter(Boolean).join('\n');
+}
+
+async function callOpenAIImage(prompt, http = fetch) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OPENAI_API_KEY is not configured for image generation.');
+  const response = await http('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1',
+      prompt,
+      size: '1024x1024',
+      quality: process.env.OPENAI_IMAGE_QUALITY || 'medium',
+      output_format: 'png'
+    })
+  });
+  if (!response.ok) throw new Error(`OpenAI image request failed (${response.status}): ${await response.text()}`);
+  const payload = await response.json();
+  const encoded = payload.data?.[0]?.b64_json;
+  if (!encoded) throw new Error('The AI provider returned an empty image.');
+  const data = Buffer.from(encoded, 'base64');
+  if (!data.length) throw new Error('The generated image could not be decoded.');
+  return { data, mimeType: 'image/png' };
+}
+
+async function generateImageForPost(id, options = {}, dependencies = {}) {
+  const activeStore = dependencies.store || store;
+  const generate = dependencies.generate || callOpenAIImage;
+  const post = await activeStore.getPost(id);
+  if (!post) throw new Error('Post not found.');
+  if (!['draft', 'approved', 'failed'].includes(post.status)) throw new Error('Images can only be generated before publishing.');
+  const direction = String(options.direction || '').trim().slice(0, 800);
+  const image = await generate(buildImagePrompt(post, direction));
+  const altText = String(options.altText || `Editorial illustration for ${post.title || 'the post'}`).trim().slice(0, 4086);
+  return activeStore.savePostImage(id, { ...image, altText, name: `signalpost-${id}.png` });
+}
+
 const TRANSFORM_ACTIONS = new Set(['regenerate', 'shorten', 'expand', 'tone', 'translate']);
 
 function buildTransformPrompt(post, action, options = {}) {
@@ -327,5 +375,6 @@ if (require.main === module) {
 module.exports = {
   generateDraft, approveAndPublish, generateAndPost, listPosts, getPost, updatePost,
   deletePost, schedulePost, publishDuePosts, buildPrompt, buildTransformPrompt, transformDraft, demoPost, store, LINKEDIN_MAX_CHARS
-  , publishToLinkedIn, publishApprovedPost, uploadImageToLinkedIn
+  , publishToLinkedIn, publishApprovedPost, uploadImageToLinkedIn,
+  buildImagePrompt, callOpenAIImage, generateImageForPost
 };

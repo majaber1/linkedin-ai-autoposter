@@ -1,6 +1,6 @@
-# SignalPost — LinkedIn AI Autoposter
+# SignalPost — Multi-channel content operations
 
-A human-in-the-loop LinkedIn content studio for generating, reviewing, approving, and publishing professional posts. The default content profile focuses on cloud, infrastructure, AI platforms, Kubernetes, resilience, and technology transformation in Saudi Arabia.
+A bilingual, human-in-the-loop content studio for planning, generating, reviewing, adapting, and distributing professional content. LinkedIn is the first verified publishing connector; editorial exports and a transparent connector roadmap prepare the same workspace for Reddit, Meetup, Instagram, TikTok, YouTube, newsletters, and technology publications without claiming unsupported integrations.
 
 ![The SignalPost review desk: a draft under review with its lifecycle track and character gauge, above the content queue](docs/review-desk.png)
 
@@ -12,6 +12,8 @@ accessible responsive UI, and stricter approval gates for manual and scheduled p
 
 
 - Modern responsive content dashboard
+- Multi-channel capability catalog with connected, export-ready, and planned states
+- Application-level English/Arabic switching with RTL/LTR layout
 - English and Arabic post generation
 - Configurable topic, tone, and objective
 - OpenAI Responses API integration

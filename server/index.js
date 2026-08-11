@@ -5,11 +5,12 @@ const fetch = require('node-fetch');
 const { readImageDimensions } = require('../lib/image-validation');
 const {
   generateDraft, approveAndPublish, listPosts, getPost, updatePost,
-  deletePost, schedulePost, publishDuePosts, transformDraft, LINKEDIN_MAX_CHARS
+  deletePost, schedulePost, publishDuePosts, transformDraft, generateImageForPost, LINKEDIN_MAX_CHARS
 } = require('../scripts/generate-and-post');
 const { store } = require('../lib/store');
 const { saveCredentials, connectionStatus } = require('../lib/linkedin-auth');
 const { reportError } = require('../lib/error-reporting');
+const { channelCatalog } = require('../lib/channels');
 const topics = require('../content/topics.json');
 
 const DEFAULT_SETTINGS = {
@@ -305,6 +306,7 @@ app.post('/auth/logout', async (req, res) => {
 
 app.get('/api/posts', requireAuth, async (req, res) => res.json({ ok: true, posts: await listPosts() }));
 app.get('/api/topics', requireAuth, async (req, res) => res.json({ ok: true, topics: (await workspaceConfig()).pillars }));
+app.get('/api/channels', requireAuth, (req, res) => res.json({ ok: true, channels: channelCatalog() }));
 app.get('/api/workspace', requireAuth, async (req, res) => res.json({ ok: true, ...(await workspaceConfig()) }));
 app.put('/api/workspace/pillars', requireAuth, async (req, res) => {
   try {
@@ -441,6 +443,23 @@ app.put('/api/posts/:id/image', requireAuth, imageBody, async (req, res) => {
     res.json({ ok: true, post });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post('/api/posts/:id/image/generate', requireAuth, generationRateLimit, async (req, res) => {
+  console.log('[image-generation] started', { postId: req.params.id });
+  try {
+    let post = await generateImageForPost(req.params.id, {
+      direction: String(req.body?.direction || '').slice(0, 800),
+      altText: String(req.body?.altText || '').slice(0, 4086)
+    });
+    if (post.status !== 'draft') post = await updatePost(req.params.id, { status: 'draft', approvedAt: null, scheduledFor: null });
+    console.log('[image-generation] completed', { postId: req.params.id, hasImage: post.hasImage });
+    res.status(201).json({ ok: true, post });
+  } catch (error) {
+    console.error('[image-generation] failed', { postId: req.params.id, error: error.message });
+    reportError(error, { route: 'generate-post-image', postId: req.params.id });
+    res.status(502).json({ ok: false, error: error.message });
   }
 });
 
