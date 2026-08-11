@@ -177,7 +177,14 @@ async function publishToLinkedIn(text, image = null) {
     body: JSON.stringify(postBody)
   });
 
-  if (!response.ok) throw new Error(`LinkedIn publish failed (${response.status}): ${await response.text()}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    if (response.status === 422 && errorText.includes('DUPLICATE_POST')) {
+      const existingId = errorText.match(/urn:li:(?:share|ugcPost):\d+/)?.[0];
+      if (existingId) return { id: existingId, duplicate: true };
+    }
+    throw new Error(`LinkedIn publish failed (${response.status}): ${errorText}`);
+  }
   return { id: response.headers.get('x-restli-id') || null };
 }
 
