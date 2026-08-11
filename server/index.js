@@ -9,7 +9,33 @@ const {
 } = require('../scripts/generate-and-post');
 const { store } = require('../lib/store');
 const { saveCredentials, connectionStatus } = require('../lib/linkedin-auth');
+const { reportError } = require('../lib/error-reporting');
 const topics = require('../content/topics.json');
+
+const DEFAULT_SETTINGS = {
+  audience: 'Technology leaders in Saudi Arabia',
+  tone: 'authoritative and practical',
+  objective: 'Start a useful discussion',
+  language: 'English'
+};
+
+async function workspaceConfig() {
+  return {
+    pillars: await store.getAppState('content_pillars') || topics,
+    settings: { ...DEFAULT_SETTINGS, ...(await store.getAppState('workspace_settings') || {}) }
+  };
+}
+
+function validatePillars(value) {
+  if (!Array.isArray(value) || !value.length || value.length > 24) throw new Error('Provide between 1 and 24 content pillars.');
+  return value.map((pillar, index) => {
+    const title = String(pillar.title || '').trim().slice(0, 120);
+    const message = String(pillar.message || '').trim().slice(0, 600);
+    if (!title || !message) throw new Error(`Pillar ${index + 1} needs a title and guidance.`);
+    const slug = String(pillar.slug || title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 80) || `pillar-${index + 1}`;
+    return { slug, title, message };
+  });
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -162,6 +188,7 @@ app.get('/api/health', async (req, res, next) => {
     durable: store.kind === 'postgres',
     automationEnabled: Boolean(process.env.AUTOMATION_API_KEY),
     schedulerConfigured: Boolean(process.env.SIGNALPOST_URL && process.env.AUTOMATION_API_KEY),
+    errorMonitoring: process.env.SENTRY_DSN ? 'sentry' : 'vercel-logs',
     demoEnabled: DEMO_ENABLED,
     maxChars: LINKEDIN_MAX_CHARS,
     version: require('../package.json').version
@@ -277,10 +304,29 @@ app.post('/auth/logout', async (req, res) => {
 });
 
 app.get('/api/posts', requireAuth, async (req, res) => res.json({ ok: true, posts: await listPosts() }));
-app.get('/api/topics', requireAuth, (req, res) => res.json({ ok: true, topics }));
+app.get('/api/topics', requireAuth, async (req, res) => res.json({ ok: true, topics: (await workspaceConfig()).pillars }));
+app.get('/api/workspace', requireAuth, async (req, res) => res.json({ ok: true, ...(await workspaceConfig()) }));
+app.put('/api/workspace/pillars', requireAuth, async (req, res) => {
+  try {
+    const pillars = validatePillars(req.body?.pillars);
+    await store.setAppState('content_pillars', pillars);
+    res.json({ ok: true, pillars });
+  } catch (error) { res.status(400).json({ ok: false, error: error.message }); }
+});
+app.put('/api/workspace/settings', requireAuth, async (req, res) => {
+  const settings = {
+    audience: String(req.body?.audience || DEFAULT_SETTINGS.audience).trim().slice(0, 300),
+    tone: String(req.body?.tone || DEFAULT_SETTINGS.tone).trim().slice(0, 100),
+    objective: String(req.body?.objective || DEFAULT_SETTINGS.objective).trim().slice(0, 300),
+    language: req.body?.language === 'Arabic' ? 'Arabic' : 'English'
+  };
+  await store.setAppState('workspace_settings', settings);
+  res.json({ ok: true, settings });
+});
 
 app.post('/api/posts/generate', requireAuth, generationRateLimit, async (req, res) => {
   try {
+    const config = await workspaceConfig();
     const sourceUrl = String(req.body.sourceUrl || '').trim();
     if (sourceUrl) {
       const parsed = new URL(sourceUrl);
@@ -296,6 +342,7 @@ app.post('/api/posts/generate', requireAuth, generationRateLimit, async (req, re
       sourceUrl,
       notes: String(req.body.notes || '').slice(0, 4000),
       cta: String(req.body.cta || '').slice(0, 300)
+      , topics: config.pillars
     });
     res.status(201).json({ ok: true, post: result });
   } catch (error) {
@@ -462,6 +509,12 @@ app.get('/api/automation/pending', requireApiKey, async (req, res) => {
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html')));
+
+app.use((error, req, res, next) => {
+  reportError(error, { route: req.path, method: req.method, requestId: req.get('x-vercel-id') || null });
+  if (res.headersSent) return next(error);
+  res.status(500).json({ ok: false, error: 'An unexpected server error occurred.' });
+});
 
 app.locals.security = { apiKeyMatches, allowedGitHubUser, validateImage, productionConfigErrors };
 

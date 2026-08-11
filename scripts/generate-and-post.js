@@ -253,7 +253,7 @@ async function publishDuePosts({ limit = 10 } = {}) {
 }
 
 async function generateDraft(options = {}) {
-  const topics = readJSON(TOPICS_FILE, []);
+  const topics = Array.isArray(options.topics) && options.topics.length ? options.topics : readJSON(TOPICS_FILE, []);
   if (!topics.length) throw new Error('No content topics are configured.');
   const cursor = await store.getCursor();
   const index = Number.isInteger(options.topicIndex) ? options.topicIndex : cursor % topics.length;

@@ -7,7 +7,7 @@
     "generate": "node scripts/generate-and-post.js",
     "dev": "nodemon server/index.js",
     "test": "node --test",
-    "check": "node --check server/index.js && node --check scripts/generate-and-post.js && node --check lib/store.js && node --check lib/linkedin-auth.js && node --check lib/image-validation.js && node --check mcp/server.js",
+    "check": "node --check server/index.js && node --check scripts/generate-and-post.js && node --check lib/store.js && node --check lib/linkedin-auth.js && node --check lib/error-reporting.js && node --check lib/image-validation.js && node --check mcp/server.js",
     "deploy": "node deploy.js",
     "mcp": "node mcp/server.js"
   },
